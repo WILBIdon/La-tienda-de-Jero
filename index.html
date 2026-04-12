@@ -47,6 +47,8 @@
                 class="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 shadow-sm focus:ring-4 focus:ring-indigo-500/20 outline-none text-sm font-bold text-slate-700">
         </div>
 
+        <div id="error-container"></div>
+
         <div id="loader" class="text-center py-20 text-slate-400 font-bold hidden">Sincronizando...</div>
         <div id="grid" class="space-y-4"></div>
     </main>
@@ -152,8 +154,10 @@
             const grid = document.getElementById('grid');
             const loader = document.getElementById('loader');
             const syncIcon = document.getElementById('sync-icon');
+            const errorBox = document.getElementById('error-container');
             
             grid.innerHTML = '';
+            errorBox.innerHTML = '';
             loader.classList.remove('hidden');
             if (syncIcon) syncIcon.classList.add('animate-spin');
 
