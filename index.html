@@ -26,33 +26,30 @@
 
     <script>
         const BASE_URL = window.location.origin;
-        const WEBHOOK_GET = `${BASE_URL}/webhook/leer-inventario`;
+        const WEBHOOK_GET  = `${BASE_URL}/webhook/leer-inventario`;
         const WEBHOOK_POST = `${BASE_URL}/webhook/actualizar-app`;
+
+        let inventory = [];
 
         async function fetchInventory() {
             const grid = document.getElementById('productGrid');
             try {
                 const response = await fetch(WEBHOOK_GET);
-                
-                // Si el servidor responde con error (ej. 404 o 500)
                 if (!response.ok) {
                     const errorText = await response.text();
-                    throw new Error(`Servidor n8n (HTTP ${response.status}): ${errorText || 'Sin mensaje de error'}`);
+                    throw new Error(`HTTP ${response.status}: ${errorText || 'Sin mensaje'}`);
                 }
-
                 inventory = await response.json();
                 renderInventory(inventory);
             } catch (e) {
-                // Esto llenará el cuadro rojo con el detalle técnico real
                 grid.innerHTML = `
                     <div class="bg-red-50 p-6 rounded-3xl border border-red-200 text-center">
                         <i class="bi bi-bug-fill text-red-500 text-3xl"></i>
                         <p class="text-red-700 font-bold mt-2">Error de Sincronización</p>
                         <div class="mt-3 p-3 bg-white rounded-xl text-[10px] font-mono text-red-600 text-left overflow-auto max-h-32 border border-red-100">
-                            <strong>Detalle técnico:</strong><br>
-                            ${e.message}
+                            <strong>Detalle técnico:</strong><br>${e.message}
                         </div>
-                        <button onclick="location.reload()" class="mt-4 text-[10px] font-bold text-red-400 uppercase tracking-widest">Reintentar</button>
+                        <button onclick="fetchInventory()" class="mt-4 text-[10px] font-bold text-red-400 uppercase tracking-widest">Reintentar</button>
                     </div>`;
             }
         }
@@ -60,41 +57,60 @@
         function renderInventory(items) {
             const grid = document.getElementById('productGrid');
             grid.innerHTML = items.map(item => {
-                // FALLBACKS para nombres de columnas según tu captura 8.36.37
                 const nombre = item.Producto || "Sin nombre";
-                const costo = item['Compra (Costo)'] || item['P. Compra (Costo)'] || 0;
-                const venta = item['P. Venta'] || 0;
-                const stock = parseInt(item.Stock || 0);
+                const costo  = item['P. Compra (Costo)'] || item['Compra (Costo)'] || 0;
+                const venta  = item['P. Venta'] || 0;
+                const stock  = parseInt(item.Stock || 0);
 
                 return `
                 <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
                     <div class="flex justify-between items-start mb-4">
                         <div>
                             <h3 class="font-bold text-slate-800">${nombre}</h3>
-                            <span class="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 uppercase">Costo: $${parseInt(costo).toLocaleString()}</span>
+                            <span class="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 uppercase">
+                                Costo: $${parseInt(costo).toLocaleString()}
+                            </span>
                         </div>
                         <p class="text-indigo-600 font-black text-xl leading-none">$${parseInt(venta).toLocaleString()}</p>
                     </div>
                     <div class="flex items-center justify-between pt-4 border-t border-slate-50">
                         <div class="flex flex-col">
                             <span class="text-[10px] text-slate-400 uppercase font-bold">Stock</span>
-                            <span class="text-2xl font-black ${stock <= 5 ? 'text-red-600' : 'text-slate-700'}">${stock}</span>
+                            <span class="text-2xl font-black ${stock <= 5 ? 'text-red-600 animate-pulse' : 'text-slate-700'}">${stock}</span>
                         </div>
-                        <button onclick="registrar('${nombre}', -1)" class="bg-red-500 text-white px-8 py-3 rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-all">VENDER -1</button>
+                        <button
+                            onclick="vender('${nombre}', ${stock})"
+                            ${stock <= 0 ? 'disabled' : ''}
+                            class="bg-red-500 text-white px-8 py-3 rounded-2xl font-black text-xs shadow-lg active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                            VENDER -1
+                        </button>
                     </div>
                 </div>`;
             }).join('');
         }
 
-        async function registrar(prod, delta) {
+        async function vender(producto, stockActual) {
+            if (stockActual <= 0) {
+                alert("Sin stock disponible");
+                return;
+            }
+
+            const nuevoStock = stockActual - 1;  // ✅ Calcula el nuevo valor
+
             try {
-                await fetch(WEBHOOK_POST, {
+                const res = await fetch(WEBHOOK_POST, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ tipo: 'venta', producto: prod, cantidad: 1 })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        producto: producto,      // ✅ Coincide con $json.body.producto en n8n
+                        nuevoStock: nuevoStock   // ✅ Coincide con $json.body.nuevoStock en n8n
+                    })
                 });
-                fetchInventory();
-            } catch (e) { alert("Error al guardar venta"); }
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                fetchInventory(); // Refresca la vista
+            } catch (e) {
+                alert("Error al guardar venta: " + e.message);
+            }
         }
 
         window.onload = fetchInventory;
