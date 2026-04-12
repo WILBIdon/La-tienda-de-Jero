@@ -26,6 +26,16 @@ function doPost(e) {
     sheet.appendRow([p.producto, p.costo, p.venta, p.stockInicial]);
     return ContentService.createTextOutput("Creado").setMimeType(ContentService.MimeType.TEXT);
   }
+
+  if (p.action === "eliminar") {
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] == p.producto) {
+        sheet.deleteRow(i + 1);
+        return ContentService.createTextOutput("Eliminado").setMimeType(ContentService.MimeType.TEXT);
+      }
+    }
+    return ContentService.createTextOutput("Producto no encontrado para eliminar").setMimeType(ContentService.MimeType.TEXT);
+  }
   
   // Si la acción no es crear (es 'actualizar' o la estructura antigua)
   for (let i = 1; i < data.length; i++) {

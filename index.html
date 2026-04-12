@@ -35,6 +35,14 @@
     </div>
 
     <main class="p-4 max-w-lg mx-auto">
+        <!-- Barra de Búsqueda -->
+        <div class="relative mb-6 z-30">
+            <i class="bi bi-search absolute left-4 top-4 text-slate-400"></i>
+            <input type="text" id="searchInput" onkeyup="filterProducts()" 
+                placeholder="Buscar producto..." 
+                class="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 shadow-sm focus:ring-4 focus:ring-indigo-500/20 outline-none text-sm font-bold text-slate-700">
+        </div>
+
         <div id="loader" class="text-center py-20 text-slate-400 font-bold">Conectando con Google Sheets...</div>
         <div id="productGrid" class="space-y-4"></div>
     </main>
@@ -160,13 +168,19 @@
                 const btnActionValue = isVentaMode ? -1 : 1;
 
                 return `
-                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 transition-all hover:shadow-md">
-                    <div class="flex justify-between items-start mb-3">
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 transition-all hover:shadow-md relative">
+                    <button onclick="deleteProduct('${i.Producto}')" class="absolute top-5 right-5 text-slate-300 hover:text-red-500 transition-colors">
+                        <i class="bi bi-trash3-fill text-xl"></i>
+                    </button>
+                    <div class="flex justify-between items-start mb-3 pr-8">
                         <div>
-                            <h3 class="font-bold text-slate-800 text-lg">${i.Producto}</h3>
+                            <h3 class="font-bold text-slate-800 text-lg leading-tight">${i.Producto}</h3>
                             <p class="text-xs text-slate-400 font-bold uppercase mt-1">Costo: $${parseInt(i['P. Compra (Costo)'] || i['Compra (Costo)'] || 0).toLocaleString()}</p>
                         </div>
-                        <p class="text-indigo-600 font-black text-xl">$${parseInt(i['P. Venta'] || 0).toLocaleString()}</p>
+                        <div class="text-right mt-1">
+                            <span class="text-[9px] font-bold text-slate-400 uppercase mt-[-10px] block">Venta</span>
+                            <p class="text-indigo-600 font-black text-xl leading-none">$${parseInt(i['P. Venta'] || 0).toLocaleString()}</p>
+                        </div>
                     </div>
                     <div class="flex items-center justify-between pt-4 border-t border-slate-50 mt-1">
                         <div>
@@ -257,6 +271,33 @@
                 btn.innerHTML = '<i class="bi bi-save2-fill"></i> Guardar Producto';
                 btn.disabled = false;
                 btn.classList.remove('opacity-70');
+            }
+        }
+
+        function filterProducts() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const filtered = inventory.filter(p => (p.Producto || "").toLowerCase().includes(query));
+            render(filtered);
+        }
+
+        async function deleteProduct(nombre) {
+            const pwd = prompt("Para eliminar '" + nombre + "', ingresa la contraseña:");
+            if (pwd === null) return; // Se canceló
+            if (pwd !== "1234") {
+                alert("Contraseña incorrecta.");
+                return;
+            }
+
+            try {
+                await fetch(GAS_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify({ action: 'eliminar', producto: nombre })
+                });
+                alert("Producto eliminado correctamente.");
+                syncData(); // Recargar datos para que desaparezca
+            } catch(e) {
+                alert("Error al intentar eliminar.");
             }
         }
 
