@@ -112,6 +112,11 @@
         let cart = {}; // { "Arroz": { qty: 2, price: 3000 } }
         let currentMode = 'venta';
 
+        // Horarios de Tienda
+        const OPEN_HOUR = 8;  // Abre 08:00 AM
+        const CLOSE_HOUR = 20; // Cierra 08:00 PM (20:00)
+        let isStoreOpen = true;
+
         // -------- GESTIÓN DE PESTAÑAS --------
         function setMode(mode) {
             currentMode = mode;
@@ -159,6 +164,12 @@
                 
                 inventory = data.inventario || [];
                 historial = data.historial || [];
+
+                if (data.clock) {
+                    const h = data.clock.hour;
+                    isStoreOpen = (h >= OPEN_HOUR && h < CLOSE_HOUR);
+                }
+                
                 renderCurrentMode();
             } catch (e) {
                 grid.innerHTML = `<div class="bg-red-50 p-6 rounded-3xl border border-red-200 text-center"><p class="text-red-700 font-bold">${e.message}</p></div>`;
@@ -182,6 +193,19 @@
 
         // -------- RENDER VENTA (POS) --------
         function renderVentas(items, container) {
+            if (!isStoreOpen) {
+                document.getElementById('cart-bar').classList.remove('active', 'flex'); 
+                document.getElementById('cart-bar').classList.add('hidden');
+                container.innerHTML = `
+                    <div class="bg-red-50 p-8 rounded-[2rem] text-center border-2 border-red-100 shadow-sm mt-8 mx-2">
+                        <i class="bi bi-clock-history text-5xl text-red-400 mb-4 inline-block"></i>
+                        <h2 class="text-2xl font-black text-red-700 tracking-tight">Tienda Cerrada</h2>
+                        <p class="text-red-500 font-bold text-sm mt-2">Horario: 0${OPEN_HOUR}:00 a ${CLOSE_HOUR}:00 Hrs.</p>
+                        <p class="text-xs text-red-400 mt-2 bg-red-100 p-2 rounded-lg inline-block">Sincronizado con Reloj de Internet</p>
+                    </div>`;
+                return;
+            }
+
             if(!items.length) { container.innerHTML = '<p class="text-center text-slate-400 font-bold pt-10">No hay productos</p>'; return; }
             
             container.innerHTML = items.map(i => {
@@ -318,7 +342,19 @@
 
         // -------- RENDER HISTORIAL --------
         function renderHistorial(container) {
-            if(!historial.length) { container.innerHTML = '<p class="text-center text-slate-400 font-bold pt-10">No hay ventas registradas</p>'; return; }
+            let headerHTML = `
+                <div class="mb-4 bg-indigo-50 p-4 rounded-3xl border border-indigo-100 flex justify-between items-center shadow-sm mx-1">
+                    <div>
+                        <h3 class="font-bold text-indigo-900 border-b border-indigo-200 pb-1">Z-Out Report</h3>
+                        <p class="text-[10px] text-indigo-500 font-black uppercase tracking-wider mt-1">Cierre diario de auditoría</p>
+                    </div>
+                    <button onclick="closeDay()" class="bg-indigo-600 text-white px-4 py-3 rounded-xl font-black text-xs uppercase active:scale-95 transition-all shadow-md flex items-center gap-2">
+                        <i class="bi bi-box-arrow-right text-lg"></i> Cerrar Día
+                    </button>
+                </div>
+            `;
+
+            if(!historial.length) { container.innerHTML = headerHTML + '<p class="text-center text-slate-400 font-bold pt-10">No hay ventas registradas</p>'; return; }
             
             // Agrupar por ID
             let groups = {};
@@ -365,6 +401,14 @@
             const p = prompt("AUDITORÍA DE VENTA\nIngresa contraseña especial (4321):");
             if(p === "4321") callback();
             else if(p !== null) alert("Clave denegada.");
+        }
+
+        async function closeDay() {
+            const pwd = prompt("CIERRE DE CAJA DIARIO\n\nEsta acción sumará todas las ventas de hoy y registrará un informe inalterable. Ingresa contraseña Administrador (1234):");
+            if(pwd !== "1234") { if(pwd !== null) alert("Clave denegada."); return; }
+            
+            runGasAction({ action: "cierre_caja" });
+            alert("El cierre de caja Z-Out ha sido enviado exitosamente al servidor.");
         }
 
         // -------- REQUESTS BACKEND --------

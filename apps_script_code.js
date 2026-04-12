@@ -30,9 +30,15 @@ function doGet() {
     }
   }
 
+  // Reloj del Servidor (Antitrampas)
+  const tz = Session.getScriptTimeZone();
+  const serverHour = parseInt(Utilities.formatDate(new Date(), tz, "H"));
+  const todayStr = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy");
+
   const result = {
     inventario: inventario,
-    historial: historial.reverse() // Para mostrar lo más reciente arriba
+    historial: historial.reverse(), // Para mostrar lo más reciente arriba
+    clock: { hour: serverHour, today: todayStr }
   };
   
   return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
@@ -127,5 +133,45 @@ function doPost(e) {
        historialSheet.deleteRow(r);
     }
     return ContentService.createTextOutput("Revertido").setMimeType(ContentService.MimeType.TEXT);
+  }
+
+  // 6. CIERRE DE CAJA
+  if (p.action === "cierre_caja") {
+    let historialSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Historial");
+    let cierresSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Cierres Diarios");
+    
+    if(!historialSheet || !cierresSheet) {
+        return ContentService.createTextOutput("Faltan pestañas").setMimeType(ContentService.MimeType.TEXT);
+    }
+    
+    const hData = historialSheet.getDataRange().getValues();
+    const tz = Session.getScriptTimeZone();
+    const todayStr = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy");
+    
+    let totalVentasHoy = 0;
+    let cantTickets = 0;
+    let itemsVendidos = 0;
+    
+    for(let i = 1; i < hData.length; i++) {
+        // Asumiendo Fecha en columna B (index 1) formateada como string, Ej "12/4/2026, 12:30:00"
+        let fechaFila = hData[i][1].toString();
+        // Criterio muy simple: revisamos si trae la misma fecha (dd/MM/yyyy)
+        // Para asegurar formato sin horas, tomamos solo la parte alfanumerica
+        if (fechaFila.includes(todayStr) || fechaFila.includes(todayStr.substring(0, 10))) {
+            cantTickets++;
+            itemsVendidos += parseInt(hData[i][3] || 0); // columna D: cantidad
+            totalVentasHoy += parseFloat(hData[i][4] || 0); // columna E: subtotal
+        }
+    }
+    
+    // Anexar informe
+    cierresSheet.appendRow([
+       Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss"),
+       "Cierre Automático Día",
+       itemsVendidos,
+       totalVentasHoy
+    ]);
+    
+    return ContentService.createTextOutput("Cierre OK").setMimeType(ContentService.MimeType.TEXT);
   }
 }
