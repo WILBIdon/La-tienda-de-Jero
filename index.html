@@ -162,12 +162,21 @@
                 if(!response.ok) throw new Error('HTTP ' + response.status);
                 const data = await response.json();
                 
-                inventory = data.inventario || [];
-                historial = data.historial || [];
+                if (Array.isArray(data)) {
+                    // ⚠️ DETECTÓ UNA VERSIÓN VIEJA DEL SERVIDOR DE APPS SCRIPT
+                    inventory = data;
+                    historial = [];
+                    isStoreOpen = true; 
+                    errorBox.innerHTML = `<div class="bg-yellow-50 text-yellow-800 p-2 text-center text-xs font-bold">⚠️ Google Apps Script no ha sido actualizado correctamente. Las funciones de Historial y Horarios no están listas. (Requiere Nueva Versión).</div>`;
+                } else {
+                    // ✅ DETECTÓ EL CÓDIGO NUEVO
+                    inventory = data.inventario || [];
+                    historial = data.historial || [];
 
-                if (data.clock) {
-                    const h = data.clock.hour;
-                    isStoreOpen = (h >= OPEN_HOUR && h < CLOSE_HOUR);
+                    if (data.clock) {
+                        const h = data.clock.hour;
+                        isStoreOpen = (h >= OPEN_HOUR && h < CLOSE_HOUR);
+                    }
                 }
                 
                 renderCurrentMode();
