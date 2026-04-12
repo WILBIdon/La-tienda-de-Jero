@@ -63,8 +63,8 @@
             <button onclick="clearCart()" class="bg-slate-700 p-3 rounded-2xl active:scale-95 text-slate-300">
                 <i class="bi bi-trash-fill"></i>
             </button>
-            <button onclick="checkoutCart()" id="btn-checkout" class="bg-green-500 px-6 py-3 rounded-2xl font-black uppercase text-sm active:scale-95 shadow-lg shadow-green-500/30 flex items-center gap-2">
-                Cobrar <i class="bi bi-check-circle-fill"></i>
+            <button onclick="openPreview()" class="bg-green-500 px-6 py-3 rounded-2xl font-black uppercase text-sm active:scale-95 shadow-lg shadow-green-500/30 flex items-center gap-2">
+                Cobrar <i class="bi bi-receipt-cutoff"></i>
             </button>
         </div>
     </div>
@@ -103,6 +103,33 @@
                 </div>
                 <button type="submit" id="btn-submit" class="w-full bg-indigo-600 text-white rounded-xl py-4 font-black uppercase text-sm mt-4 shadow-lg shadow-indigo-200 active:scale-95 transition-all">Guardar</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Modal Previa del Ticket -->
+    <div id="modal-preview" class="fixed inset-0 bg-slate-900/60 modal-overlay z-[100] hidden items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-[2rem] w-full max-w-sm p-6 shadow-2xl transform scale-95 transition-transform duration-300" id="preview-content">
+            <div class="text-center mb-6">
+                <i class="bi bi-receipt text-4xl text-slate-300 block mb-2"></i>
+                <h2 class="text-2xl font-black text-slate-800 tracking-tight">Recibo de Venta</h2>
+                <p class="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Verificación</p>
+            </div>
+            
+            <div id="preview-list" class="space-y-2 mb-6 max-h-60 overflow-y-auto pr-2 border-y border-dashed border-slate-200 py-4">
+                <!-- Se llena por javascript -->
+            </div>
+
+            <div class="flex justify-between items-center mb-6 px-1">
+                <span class="text-xs font-bold text-slate-500 uppercase">Total a pagar:</span>
+                <span id="preview-total" class="text-2xl font-black text-green-600">$0</span>
+            </div>
+
+            <div class="flex gap-2">
+                <button onclick="closePreview()" class="flex-1 bg-slate-100 text-slate-600 rounded-xl py-4 font-black uppercase text-xs active:scale-95 transition-all">Volver</button>
+                <button onclick="checkoutCart()" id="btn-checkout" class="flex-[2] bg-green-500 text-white rounded-xl py-4 font-black uppercase text-xs active:scale-95 transition-all shadow-lg shadow-green-200 flex justify-center items-center gap-2">
+                    Confirmar <i class="bi bi-check-circle-fill"></i>
+                </button>
+            </div>
         </div>
     </div>
 
@@ -178,8 +205,7 @@
                     historial = data.historial || [];
 
                     if (data.clock) {
-                        const h = data.clock.hour;
-                        isStoreOpen = (h >= OPEN_HOUR && h < CLOSE_HOUR);
+                        isStoreOpen = (data.clock.state === "OPEN");
                     }
                 }
                 
@@ -210,11 +236,14 @@
                 document.getElementById('cart-bar').classList.remove('active', 'flex'); 
                 document.getElementById('cart-bar').classList.add('hidden');
                 container.innerHTML = `
-                    <div class="bg-red-50 p-8 rounded-[2rem] text-center border-2 border-red-100 shadow-sm mt-8 mx-2">
-                        <i class="bi bi-clock-history text-5xl text-red-400 mb-4 inline-block"></i>
-                        <h2 class="text-2xl font-black text-red-700 tracking-tight">Tienda Cerrada</h2>
-                        <p class="text-red-500 font-bold text-sm mt-2">Horario: 0${OPEN_HOUR}:00 a ${CLOSE_HOUR}:00 Hrs.</p>
-                        <p class="text-xs text-red-400 mt-2 bg-red-100 p-2 rounded-lg inline-block">Sincronizado con Reloj de Internet</p>
+                    <div class="bg-indigo-50 p-8 rounded-[2rem] text-center border-2 border-indigo-100 shadow-sm mt-8 mx-2 relative overflow-hidden">
+                        <i class="bi bi-lock-fill text-6xl text-indigo-200 mb-2 inline-block"></i>
+                        <h2 class="text-3xl font-black text-indigo-900 tracking-tight">Caja Cerrada</h2>
+                        <p class="text-indigo-500 font-bold text-sm mt-2 mb-6">El sistema TPV está en Standby.</p>
+                        
+                        <button onclick="openDay()" class="bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black text-sm uppercase active:scale-95 transition-all shadow-lg shadow-indigo-200 flex items-center justify-center gap-2 mx-auto w-full">
+                            <i class="bi bi-key-fill text-xl"></i> Abrir Turno
+                        </button>
                     </div>`;
                 return;
             }
@@ -263,6 +292,43 @@
                 updateCartUI();
                 renderCurrentMode();
             }
+        }
+
+        // TICKET PREVIEW
+        function openPreview() {
+            const listContainer = document.getElementById('preview-list');
+            let listHTML = '';
+            let total = 0;
+            
+            for(let prod in cart) {
+                let sub = cart[prod].qty * cart[prod].price;
+                total += sub;
+                listHTML += `
+                <div class="flex justify-between items-center bg-slate-50 p-3 rounded-xl">
+                    <div class="flex gap-3 items-center">
+                        <span class="bg-slate-200 text-slate-600 font-black text-xs px-2 py-1 rounded-md">${cart[prod].qty}x</span>
+                        <span class="font-bold text-slate-700 text-sm">${prod}</span>
+                    </div>
+                    <span class="font-black text-slate-800">$${sub.toLocaleString()}</span>
+                </div>
+                `;
+            }
+            listContainer.innerHTML = listHTML;
+            document.getElementById('preview-total').innerText = '$' + total.toLocaleString();
+
+            document.getElementById('modal-preview').classList.remove('hidden');
+            setTimeout(() => {
+                document.getElementById('modal-preview').classList.remove('opacity-0');
+                document.getElementById('preview-content').classList.remove('scale-95', 'opacity-0');
+            }, 10);
+        }
+
+        function closePreview() {
+            document.getElementById('modal-preview').classList.add('opacity-0');
+            document.getElementById('preview-content').classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                document.getElementById('modal-preview').classList.add('hidden');
+            }, 300);
         }
 
         function updateCartUI() {
@@ -315,12 +381,12 @@
                 cart = {};
                 updateCartUI();
                 renderCurrentMode();
+                closePreview();
                 await syncData(); // Bajar stock e historial fresh
-                alert("¡Cobro exitoso registrada sin contraseña!");
             } catch(e) {
                 alert("Error al procesar el pago.");
             } finally {
-                btn.innerHTML = 'Cobrar <i class="bi bi-check-circle-fill"></i>';
+                btn.innerHTML = 'Confirmar <i class="bi bi-check-circle-fill"></i>';
             }
         }
 
@@ -404,7 +470,7 @@
             }).join('');
         }
 
-        // -------- AUTORIZACIÓN --------
+        // -------- AUTORIZACIÓN Y ESTADOS --------
         function reqPwd(callback) {
             const p = prompt("ACCESO PROTEGIDO\nIngresa contraseña de Administrador (1234):");
             if(p === "1234") callback();
@@ -416,12 +482,20 @@
             else if(p !== null) alert("Clave denegada.");
         }
 
+        async function openDay() {
+            const pwd = prompt("APERTURA DE CAJA\n\nIngresa contraseña Administrador (1234) para habilitar las ventas y registrar tu hora de entrada:");
+            if(pwd !== "1234") { if(pwd !== null) alert("Clave denegada."); return; }
+            
+            runGasAction({ action: "abrir_caja" });
+            alert("¡Caja Abierta Exitosamente!");
+        }
+
         async function closeDay() {
-            const pwd = prompt("CIERRE DE CAJA DIARIO\n\nEsta acción sumará todas las ventas de hoy y registrará un informe inalterable. Ingresa contraseña Administrador (1234):");
+            const pwd = prompt("CIERRE DE CAJA DIARIO\n\nEsta acción apagará el sistema de ventas, sumará todo y registrará un informe inalterable. Ingresa contraseña (1234):");
             if(pwd !== "1234") { if(pwd !== null) alert("Clave denegada."); return; }
             
             runGasAction({ action: "cierre_caja" });
-            alert("El cierre de caja Z-Out ha sido enviado exitosamente al servidor.");
+            alert("El cierre Z-Out se procesó. La terminal pasará a modo Standby.");
         }
 
         // -------- REQUESTS BACKEND --------

@@ -45,15 +45,18 @@ function doGet() {
      });
   }
 
-  // Reloj del Servidor (Antitrampas)
+  // Reloj y Estado del Servidor
   const tz = Session.getScriptTimeZone();
   const serverHour = parseInt(Utilities.formatDate(new Date(), tz, "H"));
   const todayStr = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy");
+  
+  // Estado manual de la tienda
+  const storeState = PropertiesService.getScriptProperties().getProperty("storeState") || "CLOSED";
 
   const result = {
     inventario: inventario,
     historial: historial.reverse(), // Para mostrar lo más reciente arriba
-    clock: { hour: serverHour, today: todayStr }
+    clock: { hour: serverHour, today: todayStr, state: storeState }
   };
   
   return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
@@ -145,10 +148,29 @@ function doPost(e) {
     return ContentService.createTextOutput("Revertido").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 6. CIERRE DE CAJA
+  // 6. APERTURA DE CAJA
+  if (p.action === "abrir_caja") {
+    PropertiesService.getScriptProperties().setProperty("storeState", "OPEN");
+    
+    let cierresSheet = getOrCreateSheet("Cierres Diarios", ["FECHA", "DESCRIPCIÓN", "ITEMS VENDIDOS", "TOTAL DINERO"]);
+    const tz = Session.getScriptTimeZone();
+    
+    cierresSheet.appendRow([
+       Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss"),
+       "Apertura de Caja (Inicio de Turno)",
+       "-",
+       "-"
+    ]);
+    
+    return ContentService.createTextOutput("Apertura Abierta").setMimeType(ContentService.MimeType.TEXT);
+  }
+
+  // 7. CIERRE DE CAJA
   if (p.action === "cierre_caja") {
+    PropertiesService.getScriptProperties().setProperty("storeState", "CLOSED");
+    
     let historialSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL"]);
-    let cierresSheet = getOrCreateSheet("Cierres Diarios", ["FECHA CORTE", "DESCRIPCIÓN", "ITEMS VENDIDOS", "TOTAL DINERO"]);
+    let cierresSheet = getOrCreateSheet("Cierres Diarios", ["FECHA", "DESCRIPCIÓN", "ITEMS VENDIDOS", "TOTAL DINERO"]);
     
     const hData = historialSheet.getDataRange().getValues();
     const tz = Session.getScriptTimeZone();
@@ -169,7 +191,7 @@ function doPost(e) {
     
     cierresSheet.appendRow([
        Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss"),
-       "Cierre Automático Z-Out",
+       "Cierre Z-Out Final de Día",
        itemsVendidos,
        totalVentasHoy
     ]);
