@@ -5,14 +5,37 @@ function doGet() {
   const data = sheet.getDataRange().getDisplayValues();
   const headers = data.shift();
   
-  const json = data.map(row => {
+  const inventario = data.map(row => {
     let obj = {};
     headers.forEach((header, i) => obj[header] = row[i]);
     return obj;
   });
+
+  let historial = [];
+  const hSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Historial");
+  if (hSheet) {
+    const hData = hSheet.getDataRange().getDisplayValues();
+    if(hData.length > 1) { // Hay datos además del encabezado
+       hData.shift(); // Quitar encabezado
+       // Columnas esperadas: A:ID, B:Fecha, C:Producto, D:Cantidad, E:Monto
+       historial = hData.map(row => {
+         return {
+           id: row[0],
+           fecha: row[1],
+           producto: row[2],
+           cantidad: row[3],
+           subtotal: row[4]
+         };
+       });
+    }
+  }
+
+  const result = {
+    inventario: inventario,
+    historial: historial.reverse() // Para mostrar lo más reciente arriba
+  };
   
-  return ContentService.createTextOutput(JSON.stringify(json))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
@@ -20,13 +43,13 @@ function doPost(e) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   const data = sheet.getDataRange().getValues();
   
+  // 1. CREAR PRODUCTO
   if (p.action === "crear") {
-    // Append a new row ensuring the proper columns:
-    // Columna A: Producto | B: P. Compra (Costo) | C: P. Venta | D: Stock
     sheet.appendRow([p.producto, p.costo, p.venta, p.stockInicial]);
     return ContentService.createTextOutput("Creado").setMimeType(ContentService.MimeType.TEXT);
   }
 
+  // 2. ELIMINAR PRODUCTO DEL INVENTARIO
   if (p.action === "eliminar") {
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] == p.producto) {
@@ -34,16 +57,75 @@ function doPost(e) {
         return ContentService.createTextOutput("Eliminado").setMimeType(ContentService.MimeType.TEXT);
       }
     }
-    return ContentService.createTextOutput("Producto no encontrado para eliminar").setMimeType(ContentService.MimeType.TEXT);
+    return ContentService.createTextOutput("No encontrado").setMimeType(ContentService.MimeType.TEXT);
   }
   
-  // Si la acción no es crear (es 'actualizar' o la estructura antigua)
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] == p.producto) {       // Columna A: Producto
-      sheet.getRange(i + 1, 4).setValue(p.nuevoStock); // Columna D: Stock
-      return ContentService.createTextOutput("OK").setMimeType(ContentService.MimeType.TEXT);
+  // 3. GESTION MANUAL DE STOCK (Carga o Disminución sin venta)
+  if (p.action === "gestionar_stock") {
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] == p.producto) {
+        sheet.getRange(i + 1, 4).setValue(p.nuevoStock);
+        return ContentService.createTextOutput("OK").setMimeType(ContentService.MimeType.TEXT);
+      }
     }
   }
-  
-  return ContentService.createTextOutput("Producto no encontrado").setMimeType(ContentService.MimeType.TEXT);
+
+  // 4. CHECKOUT (Carrito de Ventas masivo)
+  if (p.action === "checkout") {
+    let historialSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Historial");
+    const ventaId = new Date().getTime().toString(36).toUpperCase(); 
+    const fecha = new Date().toLocaleString("es-CO");
+    
+    // p.items = [{producto, qty, precio, subtotal}, ...]
+    for (let j = 0; j < p.items.length; j++) {
+      let item = p.items[j];
+      
+      // Restar stock principal
+      for (let i = 1; i < data.length; i++) {
+        if (data[i][0] == item.producto) {
+           let actual = data[i][3] || 0;
+           sheet.getRange(i + 1, 4).setValue(actual - item.qty);
+           break;
+        }
+      }
+      
+      // Grabar en Historial
+      if (historialSheet) {
+         historialSheet.appendRow([ventaId, fecha, item.producto, item.qty, item.subtotal]);
+      }
+    }
+    return ContentService.createTextOutput("Checkout OK").setMimeType(ContentService.MimeType.TEXT);
+  }
+
+  // 5. REVERTIR VENTA
+  if (p.action === "revertir_venta") {
+    let historialSheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName("Historial");
+    if(!historialSheet) return ContentService.createTextOutput("Error").setMimeType(ContentService.MimeType.TEXT);
+
+    const hData = historialSheet.getDataRange().getValues();
+    let rowsToDelete = [];
+    
+    // Escaner el historial desde el final para no descuadrar los índices al borrar
+    for (let i = hData.length - 1; i >= 1; i--) {
+       if (hData[i][0] == p.ventaId) {
+          let prod = hData[i][2];
+          let cant = hData[i][3];
+          
+          // Devolver el stock a la hoja principal
+          for (let rowInv = 1; rowInv < data.length; rowInv++) {
+             if (data[rowInv][0] == prod) {
+                let actual = data[rowInv][3] || 0;
+                sheet.getRange(rowInv + 1, 4).setValue(actual + cant);
+                break; // Break the inner loop, keep scanning the history
+             }
+          }
+          rowsToDelete.push(i + 1); // 1-based index
+       }
+    }
+    
+    for(let r of rowsToDelete) {
+       historialSheet.deleteRow(r);
+    }
+    return ContentService.createTextOutput("Revertido").setMimeType(ContentService.MimeType.TEXT);
+  }
 }

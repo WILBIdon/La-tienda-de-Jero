@@ -3,57 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>La Tienda de Jero</title>
+    <title>La Tienda de Jero - POS</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <style>
         .modal-overlay { backdrop-filter: blur(5px); }
+        .cart-bar { transform: translateY(150%); transition: transform 0.3s ease-out; }
+        .cart-bar.active { transform: translateY(0); }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen font-sans pb-24 relative">
+<body class="bg-slate-50 min-h-screen font-sans pb-32 relative">
 
-    <header class="bg-indigo-700 text-white p-6 sticky top-0 shadow-lg rounded-b-[2rem] z-50">
+    <header class="bg-indigo-700 text-white p-6 sticky top-0 shadow-lg z-50">
         <div class="max-w-lg mx-auto flex justify-between items-center">
             <div>
                 <h1 class="text-2xl font-black italic">La Tienda de Jero</h1>
-                <p id="mode-text" class="text-[10px] uppercase font-bold tracking-widest text-indigo-200">Modo: Ventas 💰</p>
+                <p id="mode-text" class="text-[10px] uppercase font-bold tracking-widest text-indigo-200">Terminal de Ventas</p>
             </div>
             <button onclick="syncData()" class="bg-indigo-600 p-3 rounded-2xl active:scale-90 transition-all shadow-md">
                 <i id="sync-icon" class="bi bi-arrow-repeat text-xl inline-block transition-transform"></i>
             </button>
         </div>
+        <!-- Pestañas -->
+        <div class="max-w-lg mx-auto flex mt-6 bg-indigo-800 rounded-xl p-1 gap-1">
+            <button onclick="setMode('venta')" id="tab-venta" class="flex-1 py-2 font-bold text-xs uppercase rounded-lg bg-white text-indigo-900 transition-all shadow-sm">
+                Ventas
+            </button>
+            <button onclick="setMode('gestion')" id="tab-gestion" class="flex-1 py-2 font-bold text-xs uppercase rounded-lg text-indigo-200 transition-all">
+                Gestión
+            </button>
+            <button onclick="setMode('historial')" id="tab-historial" class="flex-1 py-2 font-bold text-xs uppercase rounded-lg text-indigo-200 transition-all">
+                Historial
+            </button>
+        </div>
     </header>
 
-    <!-- Pestañas de Cambio de Modo -->
-    <div class="max-w-lg mx-auto bg-white flex mt-[-1rem] shadow-md rounded-2xl overflow-hidden mb-6 border border-slate-200 z-40 relative px-2">
-        <button onclick="setMode('venta')" id="tab-venta" class="flex-1 py-4 font-bold text-xs uppercase flex items-center justify-center gap-2 border-b-4 border-indigo-600 text-indigo-600 transition-all">
-            <i class="bi bi-cart-check-fill"></i> Venta
-        </button>
-        <button onclick="setMode('carga')" id="tab-carga" class="flex-1 py-4 font-bold text-xs uppercase flex items-center justify-center gap-2 border-b-4 border-transparent text-slate-400 transition-all">
-            <i class="bi bi-box-seam-fill"></i> Carga
-        </button>
-    </div>
-
     <main class="p-4 max-w-lg mx-auto">
-        <!-- Barra de Búsqueda -->
-        <div class="relative mb-6 z-30">
+        <!-- Búsqueda (Solo en Ventas y Gestión) -->
+        <div class="relative mb-6 z-30" id="search-container">
             <i class="bi bi-search absolute left-4 top-4 text-slate-400"></i>
-            <input type="text" id="searchInput" onkeyup="filterProducts()" 
+            <input type="text" id="searchInput" onkeyup="renderCurrentMode()" 
                 placeholder="Buscar producto..." 
                 class="w-full pl-12 pr-4 py-4 rounded-2xl border border-slate-200 shadow-sm focus:ring-4 focus:ring-indigo-500/20 outline-none text-sm font-bold text-slate-700">
         </div>
 
-        <div id="loader" class="text-center py-20 text-slate-400 font-bold">Conectando con Google Sheets...</div>
-        <div id="productGrid" class="space-y-4"></div>
+        <div id="loader" class="text-center py-20 text-slate-400 font-bold hidden">Sincronizando...</div>
+        <div id="grid" class="space-y-4"></div>
     </main>
 
-    <!-- Botón Flotante para Crear Producto -->
-    <button onclick="openModal()" class="fixed bottom-6 right-6 bg-indigo-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl z-50 active:scale-95 transition-all text-2xl border-4 border-white">
+    <!-- Barra de Carrito Flotante (Solo en modo Ventas) -->
+    <div id="cart-bar" class="cart-bar fixed bottom-0 left-0 w-full bg-slate-900 text-white rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.2)] z-50 p-6 flex justify-between items-center hidden">
+        <div>
+            <span class="text-xs font-bold text-slate-400 uppercase tracking-widest block">Total <span id="cart-qty" class="text-white ml-1"></span></span>
+            <p id="cart-total" class="text-2xl font-black text-green-400">$0</p>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="clearCart()" class="bg-slate-700 p-3 rounded-2xl active:scale-95 text-slate-300">
+                <i class="bi bi-trash-fill"></i>
+            </button>
+            <button onclick="checkoutCart()" id="btn-checkout" class="bg-green-500 px-6 py-3 rounded-2xl font-black uppercase text-sm active:scale-95 shadow-lg shadow-green-500/30 flex items-center gap-2">
+                Cobrar <i class="bi bi-check-circle-fill"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Botón FLOTANTE CREAR (Solo en Gestión) -->
+    <button id="fab-create" onclick="openModal()" class="hidden fixed bottom-6 right-6 bg-indigo-600 text-white w-14 h-14 rounded-full items-center justify-center shadow-2xl z-40 active:scale-95 transition-all text-2xl border-4 border-white">
         <i class="bi bi-plus-lg"></i>
     </button>
 
-    <!-- Modal para Crear Producto -->
-    <div id="modal-create" class="fixed inset-0 bg-slate-900/40 modal-overlay z-[100] hidden flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+    <!-- Modal Nuevo Producto -->
+    <div id="modal-create" class="fixed inset-0 bg-slate-900/40 modal-overlay z-[100] hidden items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <!-- Contenido del modal se mantiene igual -->
         <div class="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl transform scale-95 transition-transform duration-300" id="modal-content">
             <div class="flex justify-between items-center mb-6">
                 <h2 class="text-xl font-black text-slate-800">Nuevo Producto</h2>
@@ -62,68 +83,72 @@
             <form id="createForm" onsubmit="createProduct(event)" class="space-y-4">
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre del producto</label>
-                    <input type="text" id="p-nombre" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-bold text-slate-700">
+                    <input type="text" id="p-nombre" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700">
                 </div>
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">P. Compra</label>
-                        <div class="relative">
-                            <span class="absolute left-3 top-3 text-slate-400 font-bold">$</span>
-                            <input type="number" id="p-costo" required min="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-7 pr-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700">
-                        </div>
+                        <input type="number" id="p-costo" required min="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700">
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-1">P. Venta</label>
-                        <div class="relative">
-                            <span class="absolute left-3 top-3 text-slate-400 font-bold">$</span>
-                            <input type="number" id="p-venta" required min="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-7 pr-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 text-indigo-600 font-black">
-                        </div>
+                        <input type="number" id="p-venta" required min="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 text-indigo-600 font-black">
                     </div>
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Stock Inicial</label>
                     <input type="number" id="p-stock" required min="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700">
                 </div>
-                <button type="submit" id="btn-submit" class="w-full bg-indigo-600 text-white rounded-xl py-4 font-black uppercase text-sm mt-4 shadow-lg shadow-indigo-200 active:scale-95 transition-all flex justify-center items-center gap-2">
-                    <i class="bi bi-save2-fill"></i> Guardar Producto
-                </button>
+                <button type="submit" id="btn-submit" class="w-full bg-indigo-600 text-white rounded-xl py-4 font-black uppercase text-sm mt-4 shadow-lg shadow-indigo-200 active:scale-95 transition-all">Guardar</button>
             </form>
         </div>
     </div>
 
-    <!-- Contenedor General de App para errores -->
-    <div id="error-container"></div>
-
     <script>
         const GAS_URL = "https://script.google.com/macros/s/AKfycbySOa9gIjlatBuXjzn8zpBJEbQg8Rc1dqaxOVXJuA2IzOx0haMoI-oSQOxLYuulIJ_V/exec";
+        
         let inventory = [];
-        let currentMode = 'venta'; // puede ser 'venta' o 'carga'
+        let historial = [];
+        let cart = {}; // { "Arroz": { qty: 2, price: 3000 } }
+        let currentMode = 'venta';
 
+        // -------- GESTIÓN DE PESTAÑAS --------
         function setMode(mode) {
             currentMode = mode;
-            document.getElementById('mode-text').innerText = mode === 'venta' ? 'Modo: Ventas 💰' : 'Modo: Ingresos 📦';
-            
-            const btnVenta = document.getElementById('tab-venta');
-            const btnCarga = document.getElementById('tab-carga');
+            ['venta', 'gestion', 'historial'].forEach(m => {
+                const btn = document.getElementById('tab-' + m);
+                if (m === mode) {
+                    btn.className = "flex-1 py-2 font-bold text-xs uppercase rounded-lg bg-white text-indigo-900 transition-all shadow-sm";
+                } else {
+                    btn.className = "flex-1 py-2 font-bold text-xs uppercase rounded-lg text-indigo-200 transition-all";
+                }
+            });
 
-            if (mode === 'venta') {
-                btnVenta.className = "flex-1 py-4 font-bold text-xs uppercase flex items-center justify-center gap-2 border-b-4 border-indigo-600 text-indigo-600 transition-all";
-                btnCarga.className = "flex-1 py-4 font-bold text-xs uppercase flex items-center justify-center gap-2 border-b-4 border-transparent text-slate-400 transition-all";
+            document.getElementById('search-container').style.display = mode === 'historial' ? 'none' : 'block';
+            document.getElementById('mode-text').innerText = 
+                 mode === 'venta' ? 'Punto de Venta 🛒' 
+               : mode === 'gestion' ? 'Control de Stock 📦' 
+               : 'Auditoría de Ventas 📊';
+
+            const fab = document.getElementById('fab-create');
+            if(mode === 'gestion') {
+                fab.classList.remove('hidden');
+                fab.classList.add('flex');
             } else {
-                btnCarga.className = "flex-1 py-4 font-bold text-xs uppercase flex items-center justify-center gap-2 border-b-4 border-indigo-600 text-indigo-600 transition-all";
-                btnVenta.className = "flex-1 py-4 font-bold text-xs uppercase flex items-center justify-center gap-2 border-b-4 border-transparent text-slate-400 transition-all";
+                fab.classList.add('hidden');
+                fab.classList.remove('flex');
             }
-            render(inventory);
+
+            renderCurrentMode();
+            updateCartUI(); 
         }
 
         async function syncData() {
-            const grid = document.getElementById('productGrid');
+            const grid = document.getElementById('grid');
             const loader = document.getElementById('loader');
-            const errorBox = document.getElementById('error-container');
             const syncIcon = document.getElementById('sync-icon');
             
             grid.innerHTML = '';
-            errorBox.innerHTML = '';
             loader.classList.remove('hidden');
             if (syncIcon) syncIcon.classList.add('animate-spin');
 
@@ -131,143 +156,247 @@
                 const response = await fetch(GAS_URL);
                 if(!response.ok) throw new Error('HTTP ' + response.status);
                 const data = await response.json();
-                if(!Array.isArray(data)) throw new Error("Estructura inválida");
                 
-                inventory = data;
-                render(inventory);
+                inventory = data.inventario || [];
+                historial = data.historial || [];
+                renderCurrentMode();
             } catch (e) {
-                loader.classList.add('hidden');
-                errorBox.innerHTML = `
-                    <div class="max-w-lg mx-auto bg-red-50 p-6 rounded-3xl border border-red-200 text-center mx-4">
-                        <i class="bi bi-bug-fill text-red-500 text-4xl"></i>
-                        <p class="text-red-700 font-bold mt-2 text-lg">Error de Sincronización</p>
-                        <p class="text-red-600 text-xs font-mono mt-2 bg-white px-3 py-2 rounded-lg border border-red-100">${e.message}</p>
-                        <button onclick="syncData()" class="mt-4 bg-red-500 text-white px-6 py-2 rounded-xl font-bold text-sm">Reintentar</button>
-                    </div>
-                `;
+                grid.innerHTML = `<div class="bg-red-50 p-6 rounded-3xl border border-red-200 text-center"><p class="text-red-700 font-bold">${e.message}</p></div>`;
             } finally {
+                loader.classList.add('hidden');
                 if (syncIcon) syncIcon.classList.remove('animate-spin');
             }
         }
 
-        function render(items) {
-            const loader = document.getElementById('loader');
-            const grid = document.getElementById('productGrid');
-            loader.classList.add('hidden');
+        function renderCurrentMode() {
+            const query = (document.getElementById('searchInput').value || "").toLowerCase();
+            const filteredInventory = inventory.filter(p => (p.Producto || "").toLowerCase().includes(query));
+            
+            document.getElementById('loader').classList.add('hidden');
+            const grid = document.getElementById('grid');
 
-            if (!items.length) {
-                grid.innerHTML = '<div class="text-center py-20 text-slate-400 font-bold">No hay productos.</div>';
+            if (currentMode === 'venta') renderVentas(filteredInventory, grid);
+            else if (currentMode === 'gestion') renderGestion(filteredInventory, grid);
+            else renderHistorial(grid);
+        }
+
+        // -------- RENDER VENTA (POS) --------
+        function renderVentas(items, container) {
+            if(!items.length) { container.innerHTML = '<p class="text-center text-slate-400 font-bold pt-10">No hay productos</p>'; return; }
+            
+            container.innerHTML = items.map(i => {
+                const stock = parseInt(i.Stock || 0);
+                const isOutOfStock = stock <= 0;
+                const price = parseInt(i['P. Venta'] || 0);
+                const inCart = cart[i.Producto]?.qty || 0;
+
+                return `
+                <div class="bg-white p-5 rounded-3xl shadow-sm border ${inCart > 0 ? 'border-indigo-500 bg-indigo-50/30' : 'border-slate-100'} transition-all flex justify-between items-center">
+                    <div>
+                        <h3 class="font-bold text-slate-800 text-lg leading-tight mb-1">${i.Producto}</h3>
+                        ${inCart > 0 ? `<span class="bg-indigo-600 text-white text-[10px] font-black px-2 py-1 rounded-md">EN CARRITO (${inCart})</span>` : ''}
+                        <p class="text-xs text-slate-400 font-bold uppercase block mt-1">Stock: <span class="${stock <= 5 ? 'text-red-500' : 'text-slate-600'}">${stock}</span></p>
+                    </div>
+                    <button 
+                        onclick="addToCart('${i.Producto}', ${price}, ${stock})"
+                        ${isOutOfStock ? 'disabled' : ''}
+                        class="${isOutOfStock ? 'bg-slate-100 text-slate-400' : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'} px-6 py-4 rounded-2xl font-black text-sm active:scale-95 transition-all text-center min-w-[100px]">
+                        $${price.toLocaleString()}
+                    </button>
+                </div>
+                `;
+            }).join('');
+        }
+
+        // -------- LÓGICA CARRITO --------
+        function addToCart(producto, price, stock) {
+            if(!cart[producto]) cart[producto] = { qty: 0, price: price };
+            if(cart[producto].qty >= stock) {
+                alert("Alcanzaste el máximo stock disponible.");
+                return;
+            }
+            cart[producto].qty++;
+            updateCartUI();
+            renderCurrentMode(); // refrescar bordes
+        }
+
+        function clearCart() {
+            if(confirm("¿Vaciar todo el carrito?")) {
+                cart = {};
+                updateCartUI();
+                renderCurrentMode();
+            }
+        }
+
+        function updateCartUI() {
+            const bar = document.getElementById('cart-bar');
+            if (currentMode !== 'venta') {
+                bar.classList.remove('active', 'flex'); bar.classList.add('hidden');
                 return;
             }
 
-            grid.innerHTML = items.map(i => {
-                const stock = parseInt(i.Stock || 0);
-                const isVentaMode = currentMode === 'venta';
+            let total = 0;
+            let qty = 0;
+            for(let p in cart) {
+                total += (cart[p].qty * cart[p].price);
+                qty += cart[p].qty;
+            }
 
-                // Lógica Visual del Botón según el modo
-                const btnDisabled = isVentaMode && stock <= 0;
-                const btnColor = isVentaMode ? 'bg-red-500' : 'bg-green-500';
-                const btnShadow = isVentaMode ? 'shadow-red-200' : 'shadow-green-200';
-                const btnText = isVentaMode ? 'VENDER -1' : 'CARGAR +1';
-                const btnActionValue = isVentaMode ? -1 : 1;
+            if(qty > 0) {
+                bar.classList.remove('hidden'); bar.classList.add('flex');
+                setTimeout(() => bar.classList.add('active'), 10);
+                document.getElementById('cart-total').innerText = '$' + total.toLocaleString();
+                document.getElementById('cart-qty').innerText = `(${qty} items)`;
+            } else {
+                bar.classList.remove('active');
+                setTimeout(() => { bar.classList.add('hidden'); bar.classList.remove('flex'); }, 300);
+            }
+        }
+
+        async function checkoutCart() {
+            const btn = document.getElementById('btn-checkout');
+            btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin"></i> Procesando...';
+            
+            // Armar payload
+            let itemsPayload = [];
+            for(let prod in cart) {
+                itemsPayload.push({
+                    producto: prod,
+                    qty: cart[prod].qty,
+                    precio: cart[prod].price,
+                    subtotal: cart[prod].qty * cart[prod].price
+                });
+            }
+
+            try {
+                const rs = await fetch(GAS_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify({ action: "checkout", items: itemsPayload })
+                });
+                // Si pasa la red
+                cart = {};
+                updateCartUI();
+                renderCurrentMode();
+                await syncData(); // Bajar stock e historial fresh
+                alert("¡Cobro exitoso registrada sin contraseña!");
+            } catch(e) {
+                alert("Error al procesar el pago.");
+            } finally {
+                btn.innerHTML = 'Cobrar <i class="bi bi-check-circle-fill"></i>';
+            }
+        }
+
+        // -------- RENDER GESTIÓN (Protegida) --------
+        function renderGestion(items, container) {
+            if(!items.length) { container.innerHTML = '<p class="text-center text-slate-400 font-bold pt-10">No hay productos</p>'; return; }
+            
+            container.innerHTML = items.map(i => {
+                const stock = parseInt(i.Stock || 0);
 
                 return `
                 <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 transition-all hover:shadow-md relative">
-                    <button onclick="deleteProduct('${i.Producto}')" class="absolute top-5 right-5 text-slate-300 hover:text-red-500 transition-colors">
+                    <button onclick="reqPwd(() => deleteProduct('${i.Producto}'))" class="absolute top-4 right-4 text-slate-300 hover:text-red-500 transition-colors">
                         <i class="bi bi-trash3-fill text-xl"></i>
                     </button>
-                    <div class="flex justify-between items-start mb-3 pr-8">
-                        <div>
-                            <h3 class="font-bold text-slate-800 text-lg leading-tight">${i.Producto}</h3>
-                            <p class="text-xs text-slate-400 font-bold uppercase mt-1">Costo: $${parseInt(i['P. Compra (Costo)'] || i['Compra (Costo)'] || 0).toLocaleString()}</p>
-                        </div>
-                        <div class="text-right mt-1">
-                            <span class="text-[9px] font-bold text-slate-400 uppercase mt-[-10px] block">Venta</span>
-                            <p class="text-indigo-600 font-black text-xl leading-none">$${parseInt(i['P. Venta'] || 0).toLocaleString()}</p>
-                        </div>
+                    <div class="mb-4 pr-10">
+                        <h3 class="font-bold text-slate-800 text-lg leading-tight mb-1">${i.Producto}</h3>
+                        <p class="text-xs text-slate-500 font-bold">Costo: $${parseInt(i['P. Compra (Costo)'] || 0).toLocaleString()} | Venta: $${parseInt(i['P. Venta'] || 0).toLocaleString()}</p>
                     </div>
-                    <div class="flex items-center justify-between pt-4 border-t border-slate-50 mt-1">
-                        <div>
-                            <span class="text-[10px] text-slate-400 font-bold uppercase block tracking-wider">Stock</span>
-                            <span class="text-3xl font-black ${stock <= 5 ? 'text-red-600 animate-pulse' : 'text-slate-700'} leading-none">${stock}</span>
+                    <div class="bg-slate-50 p-2 rounded-2xl flex items-center justify-between border border-slate-100">
+                        <button onclick="reqPwd(() => manageStock('${i.Producto}', ${stock}, -1))" class="bg-white w-12 h-12 rounded-xl text-red-500 font-black shadow-sm flex items-center justify-center text-xl active:scale-90">-</button>
+                        <div class="text-center">
+                            <span class="text-[10px] text-slate-400 font-bold uppercase block -mb-1">Stock</span>
+                            <span class="text-2xl font-black text-slate-700">${stock}</span>
                         </div>
-                        <button 
-                            onclick="updateStock('${i.Producto}', ${stock}, ${btnActionValue})"
-                            ${btnDisabled ? 'disabled' : ''}
-                            class="${btnColor} shadow-lg ${btnShadow} text-white px-8 py-3 rounded-2xl font-black text-xs active:scale-95 transition-all uppercase disabled:opacity-40 disabled:scale-100">
-                            ${btnText}
-                        </button>
+                        <button onclick="reqPwd(() => manageStock('${i.Producto}', ${stock}, 1))" class="bg-indigo-500 w-12 h-12 rounded-xl text-white font-black shadow-md flex items-center justify-center text-xl active:scale-90">+</button>
                     </div>
                 </div>
                 `;
             }).join('');
         }
 
-        async function updateStock(nombre, stockActual, delta) {
-            // Requerir contraseña para vender (disminuir stock)
-            if (delta < 0) {
-                const pwd = prompt("Para registrar la venta, ingresa la contraseña:");
-                if (pwd === null) return;
-                if (pwd !== "1234") {
-                    alert("Contraseña incorrecta.");
-                    return;
-                }
-            }
-
-            const nuevoStock = stockActual + delta;
-            const syncIcon = document.getElementById('sync-icon');
-            if (syncIcon) syncIcon.classList.add('animate-spin');
+        // -------- RENDER HISTORIAL --------
+        function renderHistorial(container) {
+            if(!historial.length) { container.innerHTML = '<p class="text-center text-slate-400 font-bold pt-10">No hay ventas registradas</p>'; return; }
             
-            // Actualización visual inmediata
-            const itemRender = inventory.find(i => i.Producto === nombre);
-            if(itemRender) itemRender.Stock = nuevoStock;
-            render(inventory);
+            // Agrupar por ID
+            let groups = {};
+            historial.forEach(h => {
+                if(!groups[h.id]) groups[h.id] = { fecha: h.fecha, total: 0, items: [] };
+                groups[h.id].items.push(h);
+                groups[h.id].total += parseInt(h.subtotal || 0);
+            });
 
+            container.innerHTML = Object.keys(groups).map(id => {
+                let sale = groups[id];
+                return `
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-200">
+                    <div class="flex justify-between items-start mb-3 border-b border-slate-50 pb-3">
+                        <div>
+                            <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-1 rounded font-mono">${id}</span>
+                            <p class="text-xs font-bold text-slate-500 mt-2">${sale.fecha}</p>
+                        </div>
+                        <p class="text-green-600 font-black text-lg">$${sale.total.toLocaleString()}</p>
+                    </div>
+                    <ul class="mb-4 space-y-1">
+                        ${sale.items.map(it => `
+                          <li class="flex justify-between text-xs font-bold">
+                            <span class="text-slate-600">${it.cantidad}x ${it.producto}</span>
+                            <span class="text-slate-400">$${parseInt(it.subtotal).toLocaleString()}</span>
+                          </li>
+                        `).join('')}
+                    </ul>
+                    <button onclick="reqPwdHistorial(() => revertSale('${id}'))" class="w-full bg-red-50 text-red-600 py-3 rounded-xl font-bold text-xs uppercase hover:bg-red-100 transition-colors">
+                        Revertir e Invalidar Venta
+                    </button>
+                </div>
+                `;
+            }).join('');
+        }
+
+        // -------- AUTORIZACIÓN --------
+        function reqPwd(callback) {
+            const p = prompt("ACCESO PROTEGIDO\nIngresa contraseña de Administrador (1234):");
+            if(p === "1234") callback();
+            else if(p !== null) alert("Clave denegada.");
+        }
+        function reqPwdHistorial(callback) {
+            const p = prompt("AUDITORÍA DE VENTA\nIngresa contraseña especial (4321):");
+            if(p === "4321") callback();
+            else if(p !== null) alert("Clave denegada.");
+        }
+
+        // -------- REQUESTS BACKEND --------
+        async function runGasAction(payload) {
+            const syncIcon = document.getElementById('sync-icon');
+            if(syncIcon) syncIcon.classList.add('animate-spin');
             try {
-                await fetch(GAS_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    body: JSON.stringify({ producto: nombre, nuevoStock: nuevoStock })
-                });
-                console.log('Stock actualizado');
-            } catch (e) {
-                alert("Error al actualizar la hoja");
-            } finally {
-                if (syncIcon) syncIcon.classList.remove('animate-spin');
+                await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify(payload) });
+                await syncData();
+            } catch(e) { alert("Error de red."); } 
+            finally { if(syncIcon) syncIcon.classList.remove('animate-spin'); }
+        }
+
+        function manageStock(producto, actualStock, delta) {
+            runGasAction({ action: "gestionar_stock", producto: producto, nuevoStock: actualStock + delta });
+        }
+        function deleteProduct(producto) {
+            if(confirm(`¿ELIMINAR DEFINITIVAMENTE '${producto}'?`)) {
+                runGasAction({ action: "eliminar", producto: producto });
             }
         }
-
-        // --- Lógica del Modal para Crear Producto ---
-        function openModal() {
-            const modal = document.getElementById('modal-create');
-            const content = document.getElementById('modal-content');
-            modal.classList.remove('hidden');
-            // Timeout pequeño para la animación (permitir render display:block)
-            setTimeout(() => {
-                modal.classList.remove('opacity-0');
-                content.classList.remove('scale-95', 'opacity-0');
-            }, 10);
+        function revertSale(id) {
+            if(confirm("Se devolverá el stock y la venta desaparecerá. ¿Continuar?")) {
+                runGasAction({ action: "revertir_venta", ventaId: id });
+            }
         }
-
-        function closeModal() {
-            const modal = document.getElementById('modal-create');
-            const content = document.getElementById('modal-content');
-            modal.classList.add('opacity-0');
-            content.classList.add('scale-95', 'opacity-0');
-            setTimeout(() => {
-                modal.classList.add('hidden');
-                document.getElementById('createForm').reset();
-            }, 300);
-        }
-
+        
+        // Crear Producto se mantiene con prompt de reqPwd
         async function createProduct(event) {
             event.preventDefault();
-            const btn = document.getElementById('btn-submit');
-            const syncIcon = document.getElementById('sync-icon');
-            btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin"></i> Guardando...';
-            btn.disabled = true;
-            btn.classList.add('opacity-70');
-            if(syncIcon) syncIcon.classList.add('animate-spin');
+            const p = prompt("Seguridad Create Product\nIngresa contraseña (1234):");
+            if (p !== "1234") { if(p!==null) alert("Clave incorrecta!"); return; }
 
             const payload = {
                 action: 'crear',
@@ -276,55 +405,24 @@
                 venta: document.getElementById('p-venta').value,
                 stockInicial: document.getElementById('p-stock').value
             };
-
-            try {
-                await fetch(GAS_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    body: JSON.stringify(payload)
-                });
-                closeModal();
-                syncData(); // Recargar datos frescos
-            } catch(e) {
-                alert("Error: " + e.message);
-            } finally {
-                btn.innerHTML = '<i class="bi bi-save2-fill"></i> Guardar Producto';
-                btn.disabled = false;
-                btn.classList.remove('opacity-70');
-                if(syncIcon) syncIcon.classList.remove('animate-spin');
-            }
+            closeModal();
+            runGasAction(payload);
         }
 
-        function filterProducts() {
-            const query = document.getElementById('searchInput').value.toLowerCase();
-            const filtered = inventory.filter(p => (p.Producto || "").toLowerCase().includes(query));
-            render(filtered);
+        function openModal() {
+            document.getElementById('modal-create').classList.remove('hidden');
+            setTimeout(() => {
+                document.getElementById('modal-create').classList.remove('opacity-0');
+                document.getElementById('modal-content').classList.remove('scale-95', 'opacity-0');
+            }, 10);
         }
-
-        async function deleteProduct(nombre) {
-            const pwd = prompt("Para eliminar '" + nombre + "', ingresa la contraseña:");
-            if (pwd === null) return; // Se canceló
-            if (pwd !== "1234") {
-                alert("Contraseña incorrecta.");
-                return;
-            }
-
-            const syncIcon = document.getElementById('sync-icon');
-            if (syncIcon) syncIcon.classList.add('animate-spin');
-
-            try {
-                await fetch(GAS_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    body: JSON.stringify({ action: 'eliminar', producto: nombre })
-                });
-                alert("Producto eliminado correctamente.");
-                syncData(); // Recargar datos para que desaparezca
-            } catch(e) {
-                alert("Error al intentar eliminar.");
-            } finally {
-                if (syncIcon) syncIcon.classList.remove('animate-spin');
-            }
+        function closeModal() {
+            document.getElementById('modal-create').classList.add('opacity-0');
+            document.getElementById('modal-content').classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                document.getElementById('modal-create').classList.add('hidden');
+                document.getElementById('createForm').reset();
+            }, 300);
         }
 
         window.onload = syncData;
