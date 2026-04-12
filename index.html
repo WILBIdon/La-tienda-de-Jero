@@ -66,7 +66,8 @@
         let inventory = [];
         let modoActual = 'venta'; // 'venta' o 'carga'
 
-        const N8N_URL = "TU_WEBHOOK_N8N";
+        const WEBHOOK_GET = "https://la-tienda-de-jero-production.up.railway.app/webhook/leer-inventario";
+        const WEBHOOK_POST = "https://la-tienda-de-jero-production.up.railway.app/webhook/actualizar-app";
 
         function setModo(modo) {
             modoActual = modo;
@@ -77,13 +78,14 @@
         }
 
         async function fetchInventory() {
-            // Datos de prueba (Aquí conectarás tu n8n para leer Google Sheets)
-            inventory = [
-                { nombre: "Arroz Diana 1lb", pCompra: 2900, pVenta: 3800, stock: 25 },
-                { nombre: "Leche Colanta 1L", pCompra: 3400, pVenta: 4500, stock: 4 },
-                { nombre: "Aceite Gourmet 500ml", pCompra: 10200, pVenta: 13500, stock: 8 }
-            ];
-            renderInventory(inventory);
+            try {
+                const res = await fetch(WEBHOOK_GET);
+                const data = await res.json();
+                inventory = data;
+                renderInventory(inventory);
+            } catch (e) {
+                console.error("Error cargando inventario", e);
+            }
         }
 
         function renderInventory(items) {
@@ -131,19 +133,16 @@
 
             // Enviar a n8n
             try {
-                await fetch(N8N_URL, {
+                await fetch(WEBHOOK_POST, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         tipo: modoActual, // 'venta' o 'carga'
                         producto: productName,
-                        cantidad: Math.abs(delta),
-                        nuevoStock: item.stock,
-                        precio_aplicado: modoActual === 'venta' ? item.pVenta : item.pCompra,
-                        timestamp: new Date().toISOString()
+                        cantidad: 1
                     })
                 });
-            } catch (e) { console.error("Error sincronizando"); }
+            } catch (e) { console.error("Error sincronizando", e); }
         }
 
         function filterProducts() {
