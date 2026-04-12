@@ -20,6 +20,14 @@ function doPost(e) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   const data = sheet.getDataRange().getValues();
   
+  if (p.action === "crear") {
+    // Append a new row ensuring the proper columns:
+    // Columna A: Producto | B: P. Compra (Costo) | C: P. Venta | D: Stock
+    sheet.appendRow([p.producto, p.costo, p.venta, p.stockInicial]);
+    return ContentService.createTextOutput("Creado").setMimeType(ContentService.MimeType.TEXT);
+  }
+  
+  // Si la acción no es crear (es 'actualizar' o la estructura antigua)
   for (let i = 1; i < data.length; i++) {
     if (data[i][0] == p.producto) {       // Columna A: Producto
       sheet.getRange(i + 1, 4).setValue(p.nuevoStock); // Columna D: Stock

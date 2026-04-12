@@ -3,71 +3,260 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Inventario Jero</title>
+    <title>La Tienda de Jero</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        .modal-overlay { backdrop-filter: blur(5px); }
+    </style>
 </head>
-<body class="bg-slate-100 min-h-screen font-sans pb-10">
+<body class="bg-slate-50 min-h-screen font-sans pb-24 relative">
 
-    <header class="bg-indigo-700 text-white p-6 sticky top-0 shadow-lg rounded-b-[2rem] z-50 text-center">
-        <h1 class="text-2xl font-black italic">La Tienda de Jero</h1>
-        <p class="text-[10px] uppercase font-bold tracking-widest opacity-80">Sincronización en Tiempo Real</p>
+    <header class="bg-indigo-700 text-white p-6 sticky top-0 shadow-lg rounded-b-[2rem] z-50">
+        <div class="max-w-lg mx-auto flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-black italic">La Tienda de Jero</h1>
+                <p id="mode-text" class="text-[10px] uppercase font-bold tracking-widest text-indigo-200">Modo: Ventas 💰</p>
+            </div>
+            <button onclick="syncData()" class="bg-indigo-600 p-3 rounded-2xl active:scale-90 transition-all shadow-md">
+                <i class="bi bi-arrow-repeat text-xl"></i>
+            </button>
+        </div>
     </header>
 
-    <main class="p-4 max-w-lg mx-auto" id="app">
+    <!-- Pestañas de Cambio de Modo -->
+    <div class="max-w-lg mx-auto bg-white flex mt-[-1rem] shadow-md rounded-2xl overflow-hidden mb-6 border border-slate-200 z-40 relative px-2">
+        <button onclick="setMode('venta')" id="tab-venta" class="flex-1 py-4 font-bold text-xs uppercase flex items-center justify-center gap-2 border-b-4 border-indigo-600 text-indigo-600 transition-all">
+            <i class="bi bi-cart-check-fill"></i> Venta
+        </button>
+        <button onclick="setMode('carga')" id="tab-carga" class="flex-1 py-4 font-bold text-xs uppercase flex items-center justify-center gap-2 border-b-4 border-transparent text-slate-400 transition-all">
+            <i class="bi bi-box-seam-fill"></i> Carga
+        </button>
+    </div>
+
+    <main class="p-4 max-w-lg mx-auto">
         <div id="loader" class="text-center py-20 text-slate-400 font-bold">Conectando con Google Sheets...</div>
         <div id="productGrid" class="space-y-4"></div>
     </main>
 
+    <!-- Botón Flotante para Crear Producto -->
+    <button onclick="openModal()" class="fixed bottom-6 right-6 bg-indigo-600 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-2xl z-50 active:scale-95 transition-all text-2xl border-4 border-white">
+        <i class="bi bi-plus-lg"></i>
+    </button>
+
+    <!-- Modal para Crear Producto -->
+    <div id="modal-create" class="fixed inset-0 bg-slate-900/40 modal-overlay z-[100] hidden flex items-center justify-center p-4 opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-[2rem] w-full max-w-md p-6 shadow-2xl transform scale-95 transition-transform duration-300" id="modal-content">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-black text-slate-800">Nuevo Producto</h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-red-500 text-2xl"><i class="bi bi-x-circle-fill"></i></button>
+            </div>
+            <form id="createForm" onsubmit="createProduct(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre del producto</label>
+                    <input type="text" id="p-nombre" required class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-bold text-slate-700">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">P. Compra</label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-3 text-slate-400 font-bold">$</span>
+                            <input type="number" id="p-costo" required min="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-7 pr-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">P. Venta</label>
+                        <div class="relative">
+                            <span class="absolute left-3 top-3 text-slate-400 font-bold">$</span>
+                            <input type="number" id="p-venta" required min="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl pl-7 pr-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 text-indigo-600 font-black">
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Stock Inicial</label>
+                    <input type="number" id="p-stock" required min="0" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700">
+                </div>
+                <button type="submit" id="btn-submit" class="w-full bg-indigo-600 text-white rounded-xl py-4 font-black uppercase text-sm mt-4 shadow-lg shadow-indigo-200 active:scale-95 transition-all flex justify-center items-center gap-2">
+                    <i class="bi bi-save2-fill"></i> Guardar Producto
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Contenedor General de App para errores -->
+    <div id="error-container"></div>
+
     <script>
-        // PEGA AQUÍ LA URL QUE COPIASTE DEL PASO ANTERIOR
         const GAS_URL = "https://script.google.com/macros/s/AKfycbySOa9gIjlatBuXjzn8zpBJEbQg8Rc1dqaxOVXJuA2IzOx0haMoI-oSQOxLYuulIJ_V/exec";
+        let inventory = [];
+        let currentMode = 'venta'; // puede ser 'venta' o 'carga'
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('mode-text').innerText = mode === 'venta' ? 'Modo: Ventas 💰' : 'Modo: Ingresos 📦';
+            
+            const btnVenta = document.getElementById('tab-venta');
+            const btnCarga = document.getElementById('tab-carga');
+
+            if (mode === 'venta') {
+                btnVenta.className = "flex-1 py-4 font-bold text-xs uppercase flex items-center justify-center gap-2 border-b-4 border-indigo-600 text-indigo-600 transition-all";
+                btnCarga.className = "flex-1 py-4 font-bold text-xs uppercase flex items-center justify-center gap-2 border-b-4 border-transparent text-slate-400 transition-all";
+            } else {
+                btnCarga.className = "flex-1 py-4 font-bold text-xs uppercase flex items-center justify-center gap-2 border-b-4 border-indigo-600 text-indigo-600 transition-all";
+                btnVenta.className = "flex-1 py-4 font-bold text-xs uppercase flex items-center justify-center gap-2 border-b-4 border-transparent text-slate-400 transition-all";
+            }
+            render(inventory);
+        }
 
         async function syncData() {
+            const grid = document.getElementById('productGrid');
+            const loader = document.getElementById('loader');
+            const errorBox = document.getElementById('error-container');
+            
+            grid.innerHTML = '';
+            errorBox.innerHTML = '';
+            loader.classList.remove('hidden');
+
             try {
                 const response = await fetch(GAS_URL);
+                if(!response.ok) throw new Error('HTTP ' + response.status);
                 const data = await response.json();
-                render(data);
+                if(!Array.isArray(data)) throw new Error("Estructura inválida");
+                
+                inventory = data;
+                render(inventory);
             } catch (e) {
-                document.getElementById('app').innerHTML = `<div class="bg-red-50 p-6 rounded-3xl text-red-700 text-center">Error al leer la hoja de cálculo</div>`;
+                loader.classList.add('hidden');
+                errorBox.innerHTML = `
+                    <div class="max-w-lg mx-auto bg-red-50 p-6 rounded-3xl border border-red-200 text-center mx-4">
+                        <i class="bi bi-bug-fill text-red-500 text-4xl"></i>
+                        <p class="text-red-700 font-bold mt-2 text-lg">Error de Sincronización</p>
+                        <p class="text-red-600 text-xs font-mono mt-2 bg-white px-3 py-2 rounded-lg border border-red-100">${e.message}</p>
+                        <button onclick="syncData()" class="mt-4 bg-red-500 text-white px-6 py-2 rounded-xl font-bold text-sm">Reintentar</button>
+                    </div>
+                `;
             }
         }
 
         function render(items) {
+            const loader = document.getElementById('loader');
             const grid = document.getElementById('productGrid');
-            document.getElementById('loader').classList.add('hidden');
-            
-            grid.innerHTML = items.map(i => `
-                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-200">
+            loader.classList.add('hidden');
+
+            if (!items.length) {
+                grid.innerHTML = '<div class="text-center py-20 text-slate-400 font-bold">No hay productos.</div>';
+                return;
+            }
+
+            grid.innerHTML = items.map(i => {
+                const stock = parseInt(i.Stock || 0);
+                const isVentaMode = currentMode === 'venta';
+
+                // Lógica Visual del Botón según el modo
+                const btnDisabled = isVentaMode && stock <= 0;
+                const btnColor = isVentaMode ? 'bg-red-500' : 'bg-green-500';
+                const btnShadow = isVentaMode ? 'shadow-red-200' : 'shadow-green-200';
+                const btnText = isVentaMode ? 'VENDER -1' : 'CARGAR +1';
+                const btnActionValue = isVentaMode ? -1 : 1;
+
+                return `
+                <div class="bg-white p-5 rounded-3xl shadow-sm border border-slate-100 transition-all hover:shadow-md">
                     <div class="flex justify-between items-start mb-3">
                         <div>
                             <h3 class="font-bold text-slate-800 text-lg">${i.Producto}</h3>
-                            <p class="text-[10px] text-slate-400 font-bold uppercase">Costo: $${parseInt(i['P. Compra (Costo)'] || 0).toLocaleString()}</p>
+                            <p class="text-xs text-slate-400 font-bold uppercase mt-1">Costo: $${parseInt(i['P. Compra (Costo)'] || i['Compra (Costo)'] || 0).toLocaleString()}</p>
                         </div>
                         <p class="text-indigo-600 font-black text-xl">$${parseInt(i['P. Venta'] || 0).toLocaleString()}</p>
                     </div>
-                    <div class="flex items-center justify-between pt-3 border-t border-slate-50">
-                        <div class="flex flex-col">
-                            <span class="text-[10px] text-slate-400 font-bold uppercase">Stock</span>
-                            <span class="text-2xl font-black ${parseInt(i.Stock) < 5 ? 'text-red-600 animate-pulse' : 'text-slate-700'}">${i.Stock}</span>
+                    <div class="flex items-center justify-between pt-4 border-t border-slate-50 mt-1">
+                        <div>
+                            <span class="text-[10px] text-slate-400 font-bold uppercase block tracking-wider">Stock</span>
+                            <span class="text-3xl font-black ${stock <= 5 ? 'text-red-600 animate-pulse' : 'text-slate-700'} leading-none">${stock}</span>
                         </div>
-                        <button onclick="updateStock('${i.Producto}', ${i.Stock})" class="bg-red-500 text-white px-8 py-3 rounded-2xl font-black text-xs active:scale-95 shadow-md uppercase">Vender -1</button>
+                        <button 
+                            onclick="updateStock('${i.Producto}', ${stock}, ${btnActionValue})"
+                            ${btnDisabled ? 'disabled' : ''}
+                            class="${btnColor} shadow-lg ${btnShadow} text-white px-8 py-3 rounded-2xl font-black text-xs active:scale-95 transition-all uppercase disabled:opacity-40 disabled:scale-100">
+                            ${btnText}
+                        </button>
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
         }
 
-        async function updateStock(nombre, actual) {
+        async function updateStock(nombre, stockActual, delta) {
+            const nuevoStock = stockActual + delta;
+            
+            // Actualización visual inmediata
+            const itemRender = inventory.find(i => i.Producto === nombre);
+            if(itemRender) itemRender.Stock = nuevoStock;
+            render(inventory);
+
             try {
                 await fetch(GAS_URL, {
                     method: 'POST',
-                    mode: 'no-cors', // Importante para evitar bloqueos CORS en Apps Script
-                    body: JSON.stringify({ producto: nombre, nuevoStock: actual - 1 })
+                    mode: 'no-cors',
+                    body: JSON.stringify({ producto: nombre, nuevoStock: nuevoStock })
                 });
-                // Recarga optimista
-                setTimeout(syncData, 500);
+                console.log('Stock actualizado');
             } catch (e) {
-                alert("Error al actualizar");
+                alert("Error al actualizar la hoja");
+            }
+        }
+
+        // --- Lógica del Modal para Crear Producto ---
+        function openModal() {
+            const modal = document.getElementById('modal-create');
+            const content = document.getElementById('modal-content');
+            modal.classList.remove('hidden');
+            // Timeout pequeño para la animación (permitir render display:block)
+            setTimeout(() => {
+                modal.classList.remove('opacity-0');
+                content.classList.remove('scale-95', 'opacity-0');
+            }, 10);
+        }
+
+        function closeModal() {
+            const modal = document.getElementById('modal-create');
+            const content = document.getElementById('modal-content');
+            modal.classList.add('opacity-0');
+            content.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                document.getElementById('createForm').reset();
+            }, 300);
+        }
+
+        async function createProduct(event) {
+            event.preventDefault();
+            const btn = document.getElementById('btn-submit');
+            btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin"></i> Guardando...';
+            btn.disabled = true;
+            btn.classList.add('opacity-70');
+
+            const payload = {
+                action: 'crear',
+                producto: document.getElementById('p-nombre').value,
+                costo: document.getElementById('p-costo').value,
+                venta: document.getElementById('p-venta').value,
+                stockInicial: document.getElementById('p-stock').value
+            };
+
+            try {
+                await fetch(GAS_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify(payload)
+                });
+                closeModal();
+                syncData(); // Recargar datos frescos
+            } catch(e) {
+                alert("Error: " + e.message);
+            } finally {
+                btn.innerHTML = '<i class="bi bi-save2-fill"></i> Guardar Producto';
+                btn.disabled = false;
+                btn.classList.remove('opacity-70');
             }
         }
 
