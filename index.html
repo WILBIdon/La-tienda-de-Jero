@@ -19,7 +19,7 @@
                 <p id="mode-text" class="text-[10px] uppercase font-bold tracking-widest text-indigo-200">Modo: Ventas 💰</p>
             </div>
             <button onclick="syncData()" class="bg-indigo-600 p-3 rounded-2xl active:scale-90 transition-all shadow-md">
-                <i class="bi bi-arrow-repeat text-xl"></i>
+                <i id="sync-icon" class="bi bi-arrow-repeat text-xl inline-block transition-transform"></i>
             </button>
         </div>
     </header>
@@ -120,10 +120,12 @@
             const grid = document.getElementById('productGrid');
             const loader = document.getElementById('loader');
             const errorBox = document.getElementById('error-container');
+            const syncIcon = document.getElementById('sync-icon');
             
             grid.innerHTML = '';
             errorBox.innerHTML = '';
             loader.classList.remove('hidden');
+            if (syncIcon) syncIcon.classList.add('animate-spin');
 
             try {
                 const response = await fetch(GAS_URL);
@@ -143,6 +145,8 @@
                         <button onclick="syncData()" class="mt-4 bg-red-500 text-white px-6 py-2 rounded-xl font-bold text-sm">Reintentar</button>
                     </div>
                 `;
+            } finally {
+                if (syncIcon) syncIcon.classList.remove('animate-spin');
             }
         }
 
@@ -200,7 +204,19 @@
         }
 
         async function updateStock(nombre, stockActual, delta) {
+            // Requerir contraseña para vender (disminuir stock)
+            if (delta < 0) {
+                const pwd = prompt("Para registrar la venta, ingresa la contraseña:");
+                if (pwd === null) return;
+                if (pwd !== "1234") {
+                    alert("Contraseña incorrecta.");
+                    return;
+                }
+            }
+
             const nuevoStock = stockActual + delta;
+            const syncIcon = document.getElementById('sync-icon');
+            if (syncIcon) syncIcon.classList.add('animate-spin');
             
             // Actualización visual inmediata
             const itemRender = inventory.find(i => i.Producto === nombre);
@@ -216,6 +232,8 @@
                 console.log('Stock actualizado');
             } catch (e) {
                 alert("Error al actualizar la hoja");
+            } finally {
+                if (syncIcon) syncIcon.classList.remove('animate-spin');
             }
         }
 
@@ -245,9 +263,11 @@
         async function createProduct(event) {
             event.preventDefault();
             const btn = document.getElementById('btn-submit');
+            const syncIcon = document.getElementById('sync-icon');
             btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin"></i> Guardando...';
             btn.disabled = true;
             btn.classList.add('opacity-70');
+            if(syncIcon) syncIcon.classList.add('animate-spin');
 
             const payload = {
                 action: 'crear',
@@ -271,6 +291,7 @@
                 btn.innerHTML = '<i class="bi bi-save2-fill"></i> Guardar Producto';
                 btn.disabled = false;
                 btn.classList.remove('opacity-70');
+                if(syncIcon) syncIcon.classList.remove('animate-spin');
             }
         }
 
@@ -288,6 +309,9 @@
                 return;
             }
 
+            const syncIcon = document.getElementById('sync-icon');
+            if (syncIcon) syncIcon.classList.add('animate-spin');
+
             try {
                 await fetch(GAS_URL, {
                     method: 'POST',
@@ -298,6 +322,8 @@
                 syncData(); // Recargar datos para que desaparezca
             } catch(e) {
                 alert("Error al intentar eliminar.");
+            } finally {
+                if (syncIcon) syncIcon.classList.remove('animate-spin');
             }
         }
 
