@@ -33,18 +33,26 @@
             const grid = document.getElementById('productGrid');
             try {
                 const response = await fetch(WEBHOOK_GET);
+                
+                // Si el servidor responde con error (ej. 404 o 500)
                 if (!response.ok) {
-                    const errorData = await response.text();
-                    throw new Error(`Error en n8n: ${errorData}`);
+                    const errorText = await response.text();
+                    throw new Error(`Servidor n8n (HTTP ${response.status}): ${errorText || 'Sin mensaje de error'}`);
                 }
-                const inventory = await response.json();
+
+                inventory = await response.json();
                 renderInventory(inventory);
             } catch (e) {
+                // Esto llenará el cuadro rojo con el detalle técnico real
                 grid.innerHTML = `
                     <div class="bg-red-50 p-6 rounded-3xl border border-red-200 text-center">
-                        <i class="bi bi-exclamation-octagon text-red-500 text-4xl"></i>
+                        <i class="bi bi-bug-fill text-red-500 text-3xl"></i>
                         <p class="text-red-700 font-bold mt-2">Error de Sincronización</p>
-                        <p class="text-red-500 text-[10px] mt-2 font-mono break-all">${e.message}</p>
+                        <div class="mt-3 p-3 bg-white rounded-xl text-[10px] font-mono text-red-600 text-left overflow-auto max-h-32 border border-red-100">
+                            <strong>Detalle técnico:</strong><br>
+                            ${e.message}
+                        </div>
+                        <button onclick="location.reload()" class="mt-4 text-[10px] font-bold text-red-400 uppercase tracking-widest">Reintentar</button>
                     </div>`;
             }
         }
