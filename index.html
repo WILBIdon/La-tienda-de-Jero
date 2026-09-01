@@ -1315,31 +1315,6 @@ async function syncData() {
     }
 }
 
-        renderCurrentMode();
-    } catch (e) {
-        // Try offline cache
-        try {
-            const cached = localStorage.getItem('pos_inventory');
-            if (cached) {
-                inventory = JSON.parse(cached);
-                historial = JSON.parse(localStorage.getItem('pos_historial') || '[]');
-                cierres = JSON.parse(localStorage.getItem('pos_cierres') || '[]');
-                isStoreOpen = JSON.parse(localStorage.getItem('pos_storeOpen') || 'true');
-                lastStateTime = localStorage.getItem('pos_lastStateTime') || '';
-                toast('Sin conexión — mostrando datos guardados', 'warning');
-                renderCurrentMode();
-            } else {
-                grid.innerHTML = `<div class="empty-state" style="color:var(--red)"><i class="bi bi-wifi-off" style="font-size:32px;display:block;margin-bottom:8px"></i>${e.message}</div>`;
-            }
-        } catch(ex) {
-            grid.innerHTML = `<div class="empty-state" style="color:var(--red)">${e.message}</div>`;
-        }
-    } finally {
-        loader.style.display = 'none';
-        syncIcon?.classList.remove('spinning');
-    }
-}
-
 function renderCurrentMode() {
     const query = (document.getElementById('searchInput').value || "").toLowerCase();
     let filtered = inventory.filter(p => (p.Producto || "").toLowerCase().includes(query));
