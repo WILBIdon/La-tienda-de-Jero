@@ -45,6 +45,20 @@ function doGet() {
      });
   }
 
+  // Aseguramos que existe la hoja de Cierres Diarios
+  const cSheet = getOrCreateSheet("Cierres Diarios", ["FECHA", "DESCRIPCIÓN", "ITEMS VENDIDOS", "TOTAL DINERO"]);
+  const cData = cSheet.getDataRange().getDisplayValues();
+  let cierres = [];
+  if (cData.length > 1) {
+    cData.shift();
+    cierres = cData.map(row => ({
+      fecha: row[0],
+      descripcion: row[1],
+      items: row[2],
+      total: row[3]
+    }));
+  }
+
   // Reloj y Estado del Servidor
   const tz = Session.getScriptTimeZone();
   const serverHour = parseInt(Utilities.formatDate(new Date(), tz, "H"));
@@ -52,11 +66,13 @@ function doGet() {
   
   // Estado manual de la tienda
   const storeState = PropertiesService.getScriptProperties().getProperty("storeState") || "CLOSED";
+  const lastStateTime = PropertiesService.getScriptProperties().getProperty("lastStateTime") || "";
 
   const result = {
     inventario: inventario,
     historial: historial.reverse(), // Para mostrar lo más reciente arriba
-    clock: { hour: serverHour, today: todayStr, state: storeState }
+    cierres: cierres.reverse(),
+    clock: { hour: serverHour, today: todayStr, state: storeState, lastStateTime: lastStateTime }
   };
   
   return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
@@ -169,13 +185,16 @@ function doPost(e) {
 
   // 7. APERTURA DE CAJA
   if (p.action === "abrir_caja") {
+    const tz = Session.getScriptTimeZone();
+    const fechaHora = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
+    
     PropertiesService.getScriptProperties().setProperty("storeState", "OPEN");
+    PropertiesService.getScriptProperties().setProperty("lastStateTime", fechaHora);
     
     let cierresSheet = getOrCreateSheet("Cierres Diarios", ["FECHA", "DESCRIPCIÓN", "ITEMS VENDIDOS", "TOTAL DINERO"]);
-    const tz = Session.getScriptTimeZone();
     
     cierresSheet.appendRow([
-       Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss"),
+       fechaHora,
        "Apertura de Caja (Inicio de Turno)",
        "-",
        "-"
@@ -186,13 +205,16 @@ function doPost(e) {
 
   // 8. CIERRE DE CAJA
   if (p.action === "cierre_caja") {
+    const tz = Session.getScriptTimeZone();
+    const fechaHora = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
+    
     PropertiesService.getScriptProperties().setProperty("storeState", "CLOSED");
+    PropertiesService.getScriptProperties().setProperty("lastStateTime", fechaHora);
     
     let historialSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL"]);
     let cierresSheet = getOrCreateSheet("Cierres Diarios", ["FECHA", "DESCRIPCIÓN", "ITEMS VENDIDOS", "TOTAL DINERO"]);
     
     const hData = historialSheet.getDataRange().getValues();
-    const tz = Session.getScriptTimeZone();
     const todayStr = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy");
     
     let totalVentasHoy = 0;
@@ -209,7 +231,7 @@ function doPost(e) {
     }
     
     cierresSheet.appendRow([
-       Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss"),
+       fechaHora,
        "Cierre Z-Out Final de Día",
        itemsVendidos,
        totalVentasHoy
