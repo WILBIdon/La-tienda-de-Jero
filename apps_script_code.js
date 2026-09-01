@@ -67,11 +67,29 @@ function doPost(e) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   const data = sheet.getDataRange().getValues();
   
+  // 1. CREAR UN PRODUCTO
   if (p.action === "crear") {
     sheet.appendRow([p.producto, p.costo, p.venta, p.stockInicial]);
     return ContentService.createTextOutput("Creado").setMimeType(ContentService.MimeType.TEXT);
   }
 
+  // 2. CREAR MASIVO — Sube múltiples productos de golpe
+  if (p.action === "crear_masivo") {
+    if (p.items && Array.isArray(p.items)) {
+      for (let i = 0; i < p.items.length; i++) {
+        let item = p.items[i];
+        sheet.appendRow([
+          item.producto || "",
+          item.costo || 0,
+          item.venta || 0,
+          item.stock || 0
+        ]);
+      }
+    }
+    return ContentService.createTextOutput("Masivo OK (" + (p.items ? p.items.length : 0) + " productos)").setMimeType(ContentService.MimeType.TEXT);
+  }
+
+  // 3. ELIMINAR PRODUCTO
   if (p.action === "eliminar") {
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] == p.producto) {
@@ -82,6 +100,7 @@ function doPost(e) {
     return ContentService.createTextOutput("No encontrado").setMimeType(ContentService.MimeType.TEXT);
   }
   
+  // 4. GESTIONAR STOCK
   if (p.action === "gestionar_stock") {
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] == p.producto) {
@@ -91,7 +110,7 @@ function doPost(e) {
     }
   }
 
-  // 4. CHECKOUT (Carrito de Ventas masivo)
+  // 5. CHECKOUT (Carrito de Ventas masivo)
   if (p.action === "checkout") {
     let historialSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL"]);
     const ventaId = new Date().getTime().toString(36).toUpperCase(); 
@@ -118,7 +137,7 @@ function doPost(e) {
     return ContentService.createTextOutput("Checkout OK").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 5. REVERTIR VENTA
+  // 6. REVERTIR VENTA
   if (p.action === "revertir_venta") {
     let historialSheet = getOrCreateSheet("Historial");
     const hData = historialSheet.getDataRange().getValues();
@@ -148,7 +167,7 @@ function doPost(e) {
     return ContentService.createTextOutput("Revertido").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 6. APERTURA DE CAJA
+  // 7. APERTURA DE CAJA
   if (p.action === "abrir_caja") {
     PropertiesService.getScriptProperties().setProperty("storeState", "OPEN");
     
@@ -165,7 +184,7 @@ function doPost(e) {
     return ContentService.createTextOutput("Apertura Abierta").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 7. CIERRE DE CAJA
+  // 8. CIERRE DE CAJA
   if (p.action === "cierre_caja") {
     PropertiesService.getScriptProperties().setProperty("storeState", "CLOSED");
     
