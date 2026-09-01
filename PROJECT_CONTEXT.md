@@ -95,16 +95,17 @@ Retorna JSON:
 
 ## Mejoras Implementadas (v2) ✅
 
-- [x] **Carga masiva de inventario** — textarea con parser inteligente (auto-detecta formato)
-- [x] **Dashboard resumen del día** — ventas, tickets, alertas stock bajo
-- [x] **Alertas stock bajo** — visual en ventas y gestión (≤5 unidades)
-- [x] **Toast notifications** — reemplazar alert() del navegador
-- [x] **PIN Pad visual** — reemplazar prompt() del navegador
-- [x] **Recibo compartible** — Web Share API + copiar texto
-- [x] **Mejoras mobile UX** — dark mode premium, botones grandes, animaciones
-- [x] **Cache offline** — localStorage como fallback
-- [x] **Confirm dialogs** — modales personalizados en vez de confirm()
-- [x] **Modo oscuro premium** — diseño dark theme profesional
+- [x] **Botón de Apertura/Cierre en la Cabecera**: Acceso directo arriba junto al nombre (`🟢 ABIERTO` / `🔴 CERRADO`) protegido por PIN `1234`.
+- [x] **Bitácora Inalterable de Auditoría**: Hoja permanente en Google Sheets que registra absolutamente todo (aperturas, cierres, reversiones, cambios de precios, eliminaciones). **NO SE BORRA NUNCA**, ni al anular o revertir ventas.
+- [x] **Cambio de Precios Protegido**: Botón `🏷️ Cambiar Precio (PIN)` en cada tarjeta de gestión para actualizar Costo y Precio de Venta con PIN `1234`.
+- [x] **Carga masiva de inventario** — textarea con parser inteligente (auto-detecta formato).
+- [x] **Dashboard resumen del día** — ventas, tickets, alertas stock bajo.
+- [x] **Alertas stock bajo** — visual en ventas y gestión (≤5 unidades).
+- [x] **Toast notifications** — reemplazar alert() del navegador.
+- [x] **PIN Pad visual** — reemplazar prompt() del navegador.
+- [x] **Recibo compartible** — Web Share API + copiar texto.
+- [x] **Mejoras mobile UX** — dark mode premium, botones grandes, animaciones por módulo.
+- [x] **Cache offline** — localStorage como fallback.
 
 ## Contraseñas del Sistema
 

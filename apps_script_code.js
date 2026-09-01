@@ -14,6 +14,16 @@ function getOrCreateSheet(sheetName, headers = []) {
   return sheet;
 }
 
+// UTILIDAD PARA REGISTRAR EN LA BITÁCORA INALTERABLE (Audit Log permanente)
+function logAudit(accion, detalle) {
+  try {
+    const tz = Session.getScriptTimeZone();
+    const fechaHora = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
+    const bSheet = getOrCreateSheet("Bitacora Inalterable", ["FECHA Y HORA", "ACCION", "DETALLE"]);
+    bSheet.appendRow([fechaHora, accion, detalle]);
+  } catch(e) {}
+}
+
 function doGet() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   if(!sheet) return ContentService.createTextOutput("Error: Hoja principal no existe").setMimeType(ContentService.MimeType.TEXT);
@@ -59,6 +69,19 @@ function doGet() {
     }));
   }
 
+  // Aseguramos que existe la Bitácora Inalterable de Auditoría
+  const bSheet = getOrCreateSheet("Bitacora Inalterable", ["FECHA Y HORA", "ACCION", "DETALLE"]);
+  const bData = bSheet.getDataRange().getDisplayValues();
+  let bitacora = [];
+  if (bData.length > 1) {
+    bData.shift();
+    bitacora = bData.map(row => ({
+      fecha: row[0],
+      accion: row[1],
+      detalle: row[2]
+    }));
+  }
+
   // Reloj y Estado del Servidor
   const tz = Session.getScriptTimeZone();
   const serverHour = parseInt(Utilities.formatDate(new Date(), tz, "H"));
@@ -72,6 +95,7 @@ function doGet() {
     inventario: inventario,
     historial: historial.reverse(), // Para mostrar lo más reciente arriba
     cierres: cierres.reverse(),
+    bitacora: bitacora.reverse(),
     clock: { hour: serverHour, today: todayStr, state: storeState, lastStateTime: lastStateTime }
   };
   
@@ -86,6 +110,7 @@ function doPost(e) {
   // 1. CREAR UN PRODUCTO
   if (p.action === "crear") {
     sheet.appendRow([p.producto, p.costo, p.venta, p.stockInicial]);
+    logAudit("CREACION_PRODUCTO", "Producto '" + p.producto + "' creado con Costo: $" + p.costo + ", Venta: $" + p.venta + ", Stock: " + p.stockInicial);
     return ContentService.createTextOutput("Creado").setMimeType(ContentService.MimeType.TEXT);
   }
 
@@ -101,6 +126,7 @@ function doPost(e) {
           item.stock || 0
         ]);
       }
+      logAudit("CARGA_MASIVA", "Se cargaron " + p.items.length + " productos de forma masiva.");
     }
     return ContentService.createTextOutput("Masivo OK (" + (p.items ? p.items.length : 0) + " productos)").setMimeType(ContentService.MimeType.TEXT);
   }
@@ -110,6 +136,7 @@ function doPost(e) {
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] == p.producto) {
         sheet.deleteRow(i + 1);
+        logAudit("ELIMINACION_PRODUCTO", "Producto '" + p.producto + "' eliminado del sistema.");
         return ContentService.createTextOutput("Eliminado").setMimeType(ContentService.MimeType.TEXT);
       }
     }
@@ -120,23 +147,42 @@ function doPost(e) {
   if (p.action === "gestionar_stock") {
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] == p.producto) {
+        let anterior = data[i][3] || 0;
         sheet.getRange(i + 1, 4).setValue(p.nuevoStock);
+        logAudit("CAMBIO_STOCK", "Producto '" + p.producto + "' stock cambiado de " + anterior + " a " + p.nuevoStock);
         return ContentService.createTextOutput("OK").setMimeType(ContentService.MimeType.TEXT);
       }
     }
   }
 
-  // 5. CHECKOUT (Carrito de Ventas masivo)
+  // 5. EDITAR PRECIO (PROTEGIDO)
+  if (p.action === "editar_precio") {
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0] == p.producto) {
+        let anteriorCosto = data[i][1] || 0;
+        let anteriorVenta = data[i][2] || 0;
+        sheet.getRange(i + 1, 2).setValue(p.nuevoCosto);
+        sheet.getRange(i + 1, 3).setValue(p.nuevoVenta);
+        logAudit("CAMBIO_PRECIO", "Producto '" + p.producto + "' - Costo: $" + anteriorCosto + "->" + p.nuevoCosto + ", Venta: $" + anteriorVenta + "->" + p.nuevoVenta);
+        return ContentService.createTextOutput("Precio OK").setMimeType(ContentService.MimeType.TEXT);
+      }
+    }
+    return ContentService.createTextOutput("No encontrado").setMimeType(ContentService.MimeType.TEXT);
+  }
+
+  // 6. CHECKOUT (Carrito de Ventas masivo)
   if (p.action === "checkout") {
     let historialSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL"]);
     const ventaId = new Date().getTime().toString(36).toUpperCase(); 
     
     const tz = Session.getScriptTimeZone();
     const fecha = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
+    let totalVenta = 0;
     
     // p.items = [{producto, qty, precio, subtotal}, ...]
     for (let j = 0; j < p.items.length; j++) {
       let item = p.items[j];
+      totalVenta += parseFloat(item.subtotal || 0);
       
       // Restar stock principal
       for (let i = 1; i < data.length; i++) {
@@ -150,20 +196,24 @@ function doPost(e) {
       // Grabar en Historial
       historialSheet.appendRow([ventaId, fecha, item.producto, item.qty, item.subtotal]);
     }
+    logAudit("VENTA_REGISTRADA", "Ticket " + ventaId + " procesado por un total de $" + totalVenta + " (" + p.items.length + " items)");
     return ContentService.createTextOutput("Checkout OK").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 6. REVERTIR VENTA
+  // 7. REVERTIR VENTA
   if (p.action === "revertir_venta") {
     let historialSheet = getOrCreateSheet("Historial");
     const hData = historialSheet.getDataRange().getValues();
     let rowsToDelete = [];
+    let productosDevueltos = [];
     
     // Escanear el historial desde el final para no descuadrar los índices
     for (let i = hData.length - 1; i >= 1; i--) {
        if (hData[i][0] == p.ventaId) {
           let prod = hData[i][2];
           let cant = hData[i][3];
+          let sub = hData[i][4];
+          productosDevueltos.push(cant + "x " + prod + " ($" + sub + ")");
           
           // Devolver el stock
           for (let rowInv = 1; rowInv < data.length; rowInv++) {
@@ -180,10 +230,11 @@ function doPost(e) {
     for(let r of rowsToDelete) {
        historialSheet.deleteRow(r);
     }
+    logAudit("REVERSION_VENTA", "Ticket " + p.ventaId + " ANULADO Y REVERTIDO. Items devueltos a stock: " + productosDevueltos.join(", "));
     return ContentService.createTextOutput("Revertido").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 7. APERTURA DE CAJA
+  // 8. APERTURA DE CAJA
   if (p.action === "abrir_caja") {
     const tz = Session.getScriptTimeZone();
     const fechaHora = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
@@ -200,10 +251,11 @@ function doPost(e) {
        "-"
     ]);
     
+    logAudit("APERTURA_CAJA", "Jornada de ventas ABIERTA el " + fechaHora);
     return ContentService.createTextOutput("Apertura Abierta").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 8. CIERRE DE CAJA
+  // 9. CIERRE DE CAJA
   if (p.action === "cierre_caja") {
     const tz = Session.getScriptTimeZone();
     const fechaHora = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
@@ -237,6 +289,7 @@ function doPost(e) {
        totalVentasHoy
     ]);
     
+    logAudit("CIERRE_CAJA", "Jornada CERRADA el " + fechaHora + ". Venta total: $" + totalVentasHoy + " en " + itemsVendidos + " items.");
     return ContentService.createTextOutput("Cierre OK").setMimeType(ContentService.MimeType.TEXT);
   }
 }

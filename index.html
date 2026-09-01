@@ -836,9 +836,16 @@
                 <h1 class="store-name">La Tienda El Hueco</h1>
                 <p class="mode-label" id="mode-text">Punto de Venta 🛒</p>
             </div>
-            <button class="sync-btn" onclick="syncData()" aria-label="Sincronizar">
-                <i id="sync-icon" class="bi bi-arrow-repeat"></i>
-            </button>
+            <div style="display:flex; align-items:center; gap:8px">
+                <button id="shift-toggle-btn" onclick="toggleShiftWithPin()" class="shift-btn" title="Abrir / Cerrar Jornada">
+                    <span id="shift-badge" style="font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; padding:6px 10px; border-radius:10px; display:inline-flex; align-items:center; gap:4px">
+                        ...
+                    </span>
+                </button>
+                <button class="sync-btn" onclick="syncData()" aria-label="Sincronizar">
+                    <i id="sync-icon" class="bi bi-arrow-repeat"></i>
+                </button>
+            </div>
         </div>
         <div class="tabs">
             <button onclick="setMode('venta')" id="tab-venta" class="tab-btn active">Ventas</button>
@@ -878,7 +885,33 @@
         <button class="fab primary" onclick="openCreateModal()" title="Nuevo Producto"><i class="bi bi-plus-lg"></i></button>
     </div>
 
-    <!-- Modal: Create Product -->
+    <!-- Modal: Edit Price -->
+    <div class="modal-overlay" id="modal-edit-price">
+        <div class="modal-sheet">
+            <div class="modal-header">
+                <h2>🏷️ Editar Precios (Protegido)</h2>
+                <button class="modal-close" onclick="closeModal('modal-edit-price')"><i class="bi bi-x-circle-fill"></i></button>
+            </div>
+            <form id="editPriceForm" onsubmit="submitEditPrice(event)">
+                <input type="hidden" id="ep-nombre">
+                <div class="field">
+                    <label>Producto</label>
+                    <input type="text" id="ep-nombre-disp" readonly style="opacity:0.7">
+                </div>
+                <div class="field-row">
+                    <div class="field">
+                        <label>Nuevo P. Compra (Costo)</label>
+                        <input type="number" id="ep-costo" required min="0">
+                    </div>
+                    <div class="field">
+                        <label>Nuevo P. Venta</label>
+                        <input type="number" id="ep-venta" required min="0">
+                    </div>
+                </div>
+                <button type="submit" class="submit-btn" id="btn-edit-price-submit">Guardar Cambios de Precio</button>
+            </form>
+        </div>
+    </div>
     <div class="modal-overlay" id="modal-create">
         <div class="modal-sheet">
             <div class="modal-header">
@@ -1016,6 +1049,7 @@ const AUDIT_PIN = "4321";
 let inventory = [];
 let historial = [];
 let cierres = [];
+let bitacora = [];
 let cart = {};
 let currentMode = 'venta';
 let isStoreOpen = true;
@@ -1031,6 +1065,29 @@ let pinCallback = null;
 
 // Confirm state
 let confirmCallback = null;
+
+// ===================== SHIFT BADGE UI =====================
+function updateShiftBadgeUI() {
+    const badge = document.getElementById('shift-badge');
+    if (!badge) return;
+    if (isStoreOpen) {
+        badge.style.background = '#10b981';
+        badge.style.color = '#fff';
+        badge.innerHTML = '<i class="bi bi-unlock-fill"></i> ABIERTO';
+    } else {
+        badge.style.background = '#ef4444';
+        badge.style.color = '#fff';
+        badge.innerHTML = '<i class="bi bi-lock-fill"></i> CERRADO';
+    }
+}
+
+function toggleShiftWithPin() {
+    if (isStoreOpen) {
+        closeDay();
+    } else {
+        openDay();
+    }
+}
 
 // ===================== TOAST SYSTEM =====================
 function toast(message, type = 'info') {
@@ -1131,6 +1188,33 @@ function openBulkModal() {
     });
 }
 
+// ===================== EDIT PRICE MODAL =====================
+function openEditPriceModal(producto, costo, venta) {
+    requestPin('Cambiar Precio', 'Ingresa PIN de admin (1234)', ADMIN_PIN, () => {
+        document.getElementById('ep-nombre').value = producto;
+        document.getElementById('ep-nombre-disp').value = producto;
+        document.getElementById('ep-costo').value = costo;
+        document.getElementById('ep-venta').value = venta;
+        openModal('modal-edit-price');
+    });
+}
+
+async function submitEditPrice(event) {
+    event.preventDefault();
+    const prod = document.getElementById('ep-nombre').value;
+    const costo = document.getElementById('ep-costo').value;
+    const venta = document.getElementById('ep-venta').value;
+
+    closeModal('modal-edit-price');
+    await runGasAction({
+        action: "editar_precio",
+        producto: prod,
+        nuevoCosto: costo,
+        nuevoVenta: venta
+    });
+    toast(`Precios de "${prod}" actualizados`, 'success');
+}
+
 // ===================== TABS & MODULE COLOR SWITCHING =====================
 function setMode(mode) {
     currentMode = mode;
@@ -1176,26 +1260,58 @@ async function syncData() {
             inventory = data;
             historial = [];
             cierres = [];
+            bitacora = [];
             isStoreOpen = true;
         } else {
             inventory = data.inventario || [];
             historial = data.historial || [];
             cierres = data.cierres || [];
+            bitacora = data.bitacora || [];
             if (data.clock) {
                 isStoreOpen = (data.clock.state === "OPEN");
                 lastStateTime = data.clock.lastStateTime || '';
             }
         }
 
+        updateShiftBadgeUI();
+
         // Cache in localStorage
         try {
             localStorage.setItem('pos_inventory', JSON.stringify(inventory));
             localStorage.setItem('pos_historial', JSON.stringify(historial));
             localStorage.setItem('pos_cierres', JSON.stringify(cierres));
+            localStorage.setItem('pos_bitacora', JSON.stringify(bitacora));
             localStorage.setItem('pos_storeOpen', JSON.stringify(isStoreOpen));
             localStorage.setItem('pos_lastStateTime', lastStateTime);
             localStorage.setItem('pos_lastSync', new Date().toISOString());
         } catch(e) {}
+
+        renderCurrentMode();
+    } catch (e) {
+        // Try offline cache
+        try {
+            const cached = localStorage.getItem('pos_inventory');
+            if (cached) {
+                inventory = JSON.parse(cached);
+                historial = JSON.parse(localStorage.getItem('pos_historial') || '[]');
+                cierres = JSON.parse(localStorage.getItem('pos_cierres') || '[]');
+                bitacora = JSON.parse(localStorage.getItem('pos_bitacora') || '[]');
+                isStoreOpen = JSON.parse(localStorage.getItem('pos_storeOpen') || 'true');
+                lastStateTime = localStorage.getItem('pos_lastStateTime') || '';
+                updateShiftBadgeUI();
+                toast('Sin conexión — mostrando datos guardados', 'warning');
+                renderCurrentMode();
+            } else {
+                grid.innerHTML = `<div class="empty-state" style="color:var(--red)"><i class="bi bi-wifi-off" style="font-size:32px;display:block;margin-bottom:8px"></i>${e.message}</div>`;
+            }
+        } catch(ex) {
+            grid.innerHTML = `<div class="empty-state" style="color:var(--red)">${e.message}</div>`;
+        }
+    } finally {
+        loader.style.display = 'none';
+        syncIcon?.classList.remove('spinning');
+    }
+}
 
         renderCurrentMode();
     } catch (e) {
@@ -1454,6 +1570,9 @@ function renderGestion(items, container) {
             <div class="info">
                 <div class="name">${i.Producto} ${isLow ? '<span style="color:var(--red);font-size:10px;font-weight:800">⚠ BAJO</span>' : ''}</div>
                 <div class="prices">Costo: $${parseInt(i['P. Compra (Costo)'] || 0).toLocaleString()} · Venta: $${parseInt(i['P. Venta'] || 0).toLocaleString()}</div>
+                <button onclick="openEditPriceModal('${safeName}', ${parseInt(i['P. Compra (Costo)'] || 0)}, ${parseInt(i['P. Venta'] || 0)})" style="background:rgba(245,158,11,0.12); color:#f59e0b; border:none; padding:4px 8px; border-radius:6px; font-size:10px; font-weight:800; margin-top:6px; cursor:pointer">
+                    <i class="bi bi-tag-fill"></i> Cambiar Precio (PIN)
+                </button>
             </div>
             <div class="stock-controls">
                 <button class="stock-btn minus" onclick="handleStock('${safeName}', ${stock}, -1)">−</button>
@@ -1523,6 +1642,29 @@ function renderHistorial(container) {
         `;
     }
 
+    // Bitácora Inalterable Section (Audit Log permanente)
+    let bitacoraHTML = '';
+    if (bitacora && bitacora.length) {
+        bitacoraHTML = `
+            <div style="margin-bottom:20px">
+                <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#ef4444; margin-bottom:10px; display:flex; align-items:center; gap:6px">
+                    <i class="bi bi-shield-lock-fill" style="color:#ef4444"></i> Bitácora Inalterable de Auditoría (Permanente)
+                </div>
+                <div style="display:flex; flex-direction:column; gap:8px; max-height:240px; overflow-y:auto; padding-right:4px">
+                    ${bitacora.slice(0, 15).map(b => `
+                        <div style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.18); border-radius:12px; padding:10px 12px">
+                            <div style="display:flex; justify-content:space-between; align-items:center">
+                                <span style="font-size:10px; font-weight:900; color:#ef4444; text-transform:uppercase; background:rgba(239,68,68,0.12); padding:2px 6px; border-radius:4px">${b.accion || 'AUDIT'}</span>
+                                <span style="font-size:10px; color:var(--text-muted); font-weight:700"><i class="bi bi-clock"></i> ${b.fecha}</span>
+                            </div>
+                            <div style="font-size:11px; color:var(--text-secondary); font-weight:600; margin-top:6px; line-height:1.4">${b.detalle}</div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
     let salesTitleHTML = `
         <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:10px; display:flex; align-items:center; gap:6px">
             <i class="bi bi-receipt" style="color:var(--green)"></i> Ventas Registradas (Tickets)
@@ -1530,7 +1672,7 @@ function renderHistorial(container) {
     `;
 
     if (!historial.length) {
-        container.innerHTML = headerHTML + cierresHTML + salesTitleHTML + '<div class="empty-state">No hay ventas registradas en esta jornada</div>';
+        container.innerHTML = headerHTML + cierresHTML + bitacoraHTML + salesTitleHTML + '<div class="empty-state">No hay ventas registradas en esta jornada</div>';
         return;
     }
 
@@ -1564,7 +1706,7 @@ function renderHistorial(container) {
         </div>`;
     }).join('');
 
-    container.innerHTML = headerHTML + cierresHTML + salesTitleHTML + salesListHTML;
+    container.innerHTML = headerHTML + cierresHTML + bitacoraHTML + salesTitleHTML + salesListHTML;
 }
 
 // ===================== PROTECTED ACTIONS =====================
