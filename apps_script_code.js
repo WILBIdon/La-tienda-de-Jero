@@ -155,16 +155,21 @@ function doPost(e) {
     }
   }
 
-  // 5. EDITAR PRECIO (PROTEGIDO)
-  if (p.action === "editar_precio") {
+  // 5. EDITAR PRODUCTO / PRECIOS (PROTEGIDO)
+  if (p.action === "editar_precio" || p.action === "editar_producto") {
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] == p.producto) {
+        let anteriorNombre = data[i][0];
         let anteriorCosto = data[i][1] || 0;
         let anteriorVenta = data[i][2] || 0;
+        
+        let nuevoNombre = p.nuevoNombre || p.producto;
+        sheet.getRange(i + 1, 1).setValue(nuevoNombre);
         sheet.getRange(i + 1, 2).setValue(p.nuevoCosto);
         sheet.getRange(i + 1, 3).setValue(p.nuevoVenta);
-        logAudit("CAMBIO_PRECIO", "Producto '" + p.producto + "' - Costo: $" + anteriorCosto + "->" + p.nuevoCosto + ", Venta: $" + anteriorVenta + "->" + p.nuevoVenta);
-        return ContentService.createTextOutput("Precio OK").setMimeType(ContentService.MimeType.TEXT);
+        
+        logAudit("EDICION_PRODUCTO", "Producto '" + anteriorNombre + "' modificado a '" + nuevoNombre + "' - Costo: $" + anteriorCosto + "->" + p.nuevoCosto + ", Venta: $" + anteriorVenta + "->" + p.nuevoVenta);
+        return ContentService.createTextOutput("Edicion OK").setMimeType(ContentService.MimeType.TEXT);
       }
     }
     return ContentService.createTextOutput("No encontrado").setMimeType(ContentService.MimeType.TEXT);
