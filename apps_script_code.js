@@ -1,11 +1,21 @@
 const SHEET_NAME = "Añadiendo Precios y Calculando Ganancias";
 
-// UTILIDAD PARA ASEGURAR QUE LAS PESTAÑAS EXISTEN
+// UTILIDAD ROBUSTA PARA ASEGURAR QUE LAS PESTAÑAS EXISTEN SIN DUPLICARLAS
 function getOrCreateSheet(sheetName, headers = []) {
   let ss = SpreadsheetApp.getActiveSpreadsheet();
-  let sheet = ss.getSheetByName(sheetName);
+  let targetClean = sheetName.trim().toLowerCase();
+  let sheets = ss.getSheets();
+  let sheet = null;
+
+  for (let s of sheets) {
+    if (s.getName().trim().toLowerCase() === targetClean) {
+      sheet = s;
+      break;
+    }
+  }
+
   if (!sheet) {
-    sheet = ss.insertSheet(sheetName);
+    sheet = ss.insertSheet(sheetName.trim());
     if (headers.length > 0) {
       sheet.appendRow(headers);
       sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
@@ -25,9 +35,7 @@ function logAudit(accion, detalle) {
 }
 
 function doGet() {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  if(!sheet) return ContentService.createTextOutput("Error: Hoja principal no existe").setMimeType(ContentService.MimeType.TEXT);
-
+  const sheet = getOrCreateSheet(SHEET_NAME, ["Producto", "P. Compra (Costo)", "P. Venta", "Stock"]);
   const data = sheet.getDataRange().getDisplayValues();
   const headers = data.shift() || [];
   
@@ -85,7 +93,7 @@ function doGet() {
     }));
   }
 
-  // 4. Fiados (Cuentas por cobrar)
+  // 4. Fiados (Cuentas Acumulables por cobrar)
   const fSheet = getOrCreateSheet("Fiados", ["ID FIADO", "FECHA", "CLIENTE", "PRODUCTOS / DETALLE", "TOTAL", "ESTADO"]);
   const fData = fSheet.getDataRange().getDisplayValues();
   let fiados = [];
@@ -132,7 +140,7 @@ function doGet() {
 
 function doPost(e) {
   const p = JSON.parse(e.postData.contents);
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  const sheet = getOrCreateSheet(SHEET_NAME, ["Producto", "P. Compra (Costo)", "P. Venta", "Stock"]);
   const data = sheet.getDataRange().getValues();
   
   // 1. CREAR UN PRODUCTO
@@ -295,7 +303,6 @@ function doPost(e) {
     let itemsVendidosTurno = 0;
     let cantTicketsTurno = 0;
     
-    // Sumar las ventas asociadas a este turno específico
     for(let i = 1; i < hData.length; i++) {
         let turnoFila = hData[i][5] ? hData[i][5].toString() : "";
         if (turnoFila === activeShiftId || (!activeShiftId && hData[i][1].toString().includes(Utilities.formatDate(new Date(), tz, "dd/MM/yyyy")))) {
@@ -305,12 +312,11 @@ function doPost(e) {
         }
     }
     
-    // Buscar la fila del turno abierto en Cierres Diarios y actualizarla
     let turnoEncontrado = false;
     for (let c = cData.length - 1; c >= 1; c--) {
         if (cData[c][0] === activeShiftId || cData[c][3] === "ABIERTO") {
-            cierresSheet.getRange(c + 1, 3).setValue(fechaHora); // FECHA CIERRE
-            cierresSheet.getRange(c + 1, 4).setValue("CERRADO"); // ESTADO
+            cierresSheet.getRange(c + 1, 3).setValue(fechaHora);
+            cierresSheet.getRange(c + 1, 4).setValue("CERRADO");
             cierresSheet.getRange(c + 1, 5).setValue(itemsVendidosTurno);
             cierresSheet.getRange(c + 1, 6).setValue(totalVentasTurno);
             turnoEncontrado = true;
@@ -318,7 +324,6 @@ function doPost(e) {
         }
     }
     
-    // Si no existía la fila previa, se registra completa
     if (!turnoEncontrado) {
         cierresSheet.appendRow([activeShiftId || "TRN-MANUAL", fechaHora, fechaHora, "CERRADO", itemsVendidosTurno, totalVentasTurno]);
     }
@@ -331,14 +336,15 @@ function doPost(e) {
     return ContentService.createTextOutput("Cierre OK").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 10. REGISTRAR FIADO
+  // 10. REGISTRAR / ACUMULAR FIADO (DEUDA DE CLIENTE)
   if (p.action === "crear_fiado") {
     const fSheet = getOrCreateSheet("Fiados", ["ID FIADO", "FECHA", "CLIENTE", "PRODUCTOS / DETALLE", "TOTAL", "ESTADO"]);
-    const fiadoId = "F-" + new Date().getTime().toString(36).toUpperCase();
+    const fData = fSheet.getDataRange().getValues();
     const activeShiftId = PropertiesService.getScriptProperties().getProperty("activeShiftId") || "TURNO-LIBRE";
     const tz = Session.getScriptTimeZone();
     const fecha = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
     
+    // Restar stock si trae items
     if (p.items && Array.isArray(p.items)) {
       for (let j = 0; j < p.items.length; j++) {
         let item = p.items[j];
@@ -352,12 +358,41 @@ function doPost(e) {
       }
     }
     
-    fSheet.appendRow([fiadoId, fecha, p.cliente, p.detalle, p.total, "PENDIENTE"]);
-    logAudit("FIADO_CREADO", "Fiado registrado a '" + p.cliente + "' por un total de $" + p.total + " (ID: " + fiadoId + ", Turno: " + activeShiftId + ")");
-    return ContentService.createTextOutput("Fiado OK").setMimeType(ContentService.MimeType.TEXT);
+    // Verificar si el cliente ya tiene una cuenta PENDIENTE abierta (ej: Doña Carlota)
+    let targetRow = -1;
+    let clienteNorm = p.cliente.toString().trim().toLowerCase();
+    for (let i = 1; i < fData.length; i++) {
+      let cName = fData[i][2] ? fData[i][2].toString().trim().toLowerCase() : "";
+      let cState = fData[i][5] ? fData[i][5].toString().trim().toUpperCase() : "";
+      if (cName === clienteNorm && cState === "PENDIENTE") {
+        targetRow = i + 1; // 1-based index
+        break;
+      }
+    }
+
+    if (targetRow > 1) {
+      // Acumular a la cuenta existente
+      let prevDetalle = fData[targetRow - 1][3] || "";
+      let prevTotal = parseFloat(fData[targetRow - 1][4] || 0);
+      let newTotal = prevTotal + parseFloat(p.total || 0);
+      let combinedDetalle = prevDetalle ? (prevDetalle + " | " + p.detalle) : p.detalle;
+
+      fSheet.getRange(targetRow, 2).setValue(fecha); // Actualizar fecha de última actividad
+      fSheet.getRange(targetRow, 4).setValue(combinedDetalle);
+      fSheet.getRange(targetRow, 5).setValue(newTotal);
+
+      logAudit("FIADO_ACUMULADO", "Fiado acumulado a '" + p.cliente + "'. Saldo anterior: $" + prevTotal + ", Nuevo: $" + p.total + ", Total acumulado: $" + newTotal);
+      return ContentService.createTextOutput("Fiado Acumulado OK").setMimeType(ContentService.MimeType.TEXT);
+    } else {
+      // Crear nueva cuenta fiada
+      const fiadoId = "F-" + new Date().getTime().toString(36).toUpperCase();
+      fSheet.appendRow([fiadoId, fecha, p.cliente, p.detalle, p.total, "PENDIENTE"]);
+      logAudit("FIADO_CREADO", "Fiado registrado a '" + p.cliente + "' por $" + p.total + " (ID: " + fiadoId + ")");
+      return ContentService.createTextOutput("Fiado OK").setMimeType(ContentService.MimeType.TEXT);
+    }
   }
 
-  // 11. PAGAR FIADO
+  // 11. PAGAR FIADO (COBRAR DEUDA DE CLIENTE)
   if (p.action === "pagar_fiado") {
     const fSheet = getOrCreateSheet("Fiados");
     const fData = fSheet.getDataRange().getValues();

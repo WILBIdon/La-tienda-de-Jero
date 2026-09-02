@@ -1983,10 +1983,10 @@ function renderFiados(container) {
     let totalPendingMoney = pending.reduce((acc, f) => acc + parseInt(f.total || 0), 0);
 
     let html = `
-        <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:16px; text-align:center">
-            <div style="font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px">Total Cuentas Pendientes por Cobrar</div>
-            <div style="font-size:28px; font-weight:900; color:var(--yellow); margin-top:4px">$${totalPendingMoney.toLocaleString()}</div>
-            <div style="font-size:11px; color:var(--text-secondary); font-weight:700; margin-top:2px">${pending.length} clientes por cobrar</div>
+        <div style=\"background:rgba(239,68,68,0.1); border:1.5px solid #ef4444; border-radius:var(--radius); padding:16px; margin-bottom:16px; text-align:center; box-shadow:0 4px 16px rgba(239,68,68,0.2)\">
+            <div style=\"font-size:11px; font-weight:800; color:#fca5a5; text-transform:uppercase; letter-spacing:1px\">Total Deudas Pendientes (Por Cobrar)</div>
+            <div style=\"font-size:30px; font-weight:900; color:#ef4444; margin-top:4px\">$${totalPendingMoney.toLocaleString()}</div>
+            <div style=\"font-size:11px; color:rgba(255,255,255,0.8); font-weight:700; margin-top:2px\">🔴 ${pending.length} clientes en cartera por cobrar</div>
         </div>
     `;
 
@@ -1996,47 +1996,66 @@ function renderFiados(container) {
     }
 
     if (pending.length) {
-        html += `<div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--yellow); margin-bottom:10px"><i class="bi bi-exclamation-circle-fill"></i> Pendientes de Pago (${pending.length})</div>`;
-        html += pending.map(f => `
-            <div style="background:var(--bg-card); border:1px solid rgba(245,158,11,0.3); border-radius:14px; padding:14px; margin-bottom:10px">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px">
+        html += `<div style=\"font-size:12px; font-weight:900; text-transform:uppercase; letter-spacing:1px; color:#ef4444; margin-bottom:10px; display:flex; align-items:center; gap:6px\"><i class=\"bi bi-exclamation-octagon-fill\"></i> Cuentas Abiertas (${pending.length})</div>`;
+        html += pending.map(f => {
+            const safeClientName = f.cliente.replace(/'/g, "\\'");
+            return `
+            <div style=\"background:rgba(239,68,68,0.06); border:1.5px solid #ef4444; border-radius:16px; padding:16px; margin-bottom:12px; box-shadow:0 4px 14px rgba(239,68,68,0.15)\">
+                <div style=\"display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px\">
                     <div>
-                        <div style="font-size:16px; font-weight:900; color:#fff">👤 ${f.cliente}</div>
-                        <div style="font-size:10px; color:var(--text-muted); font-weight:700">${f.fecha}</div>
+                        <div style=\"display:flex; align-items:center; gap:6px\">
+                            <div style=\"font-size:17px; font-weight:900; color:#fff\">👤 ${f.cliente}</div>
+                            <span style=\"background:#ef4444; color:#fff; font-size:10px; font-weight:900; padding:2px 8px; border-radius:6px; letter-spacing:0.5px\">🔴 POR COBRAR</span>
+                        </div>
+                        <div style=\"font-size:10px; color:var(--text-muted); font-weight:700; margin-top:2px\">Última actividad: ${f.fecha}</div>
                     </div>
-                    <div style="font-size:18px; font-weight:900; color:var(--yellow)">$${parseInt(f.total || 0).toLocaleString()}</div>
+                    <div style=\"font-size:22px; font-weight:900; color:#ef4444\">$${parseInt(f.total || 0).toLocaleString()}</div>
                 </div>
-                <div style="font-size:12px; color:var(--text-secondary); font-weight:600; margin-bottom:12px; background:rgba(0,0,0,0.2); padding:8px; border-radius:8px">
+                <div style=\"font-size:12px; color:var(--text-secondary); font-weight:600; margin-bottom:12px; background:rgba(0,0,0,0.3); padding:10px; border-radius:10px; border:1px solid rgba(255,255,255,0.05)\">
                     ${f.detalle}
                 </div>
-                <div style="display:flex; gap:8px">
-                    <button onclick="pagarFiado('${f.id}', '${f.cliente.replace(/'/g, "\\'")}', ${f.total})" style="flex:1; background:var(--green); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; font-size:12px; cursor:pointer">
-                        <i class="bi bi-check-circle-fill"></i> Cobrar Deuda
+                <div style=\"display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-bottom:8px\">
+                    <button onclick=\"addItemsToExistingFiado('${safeClientName}')\" style=\"background:rgba(255,255,255,0.1); color:#fff; border:1px solid rgba(255,255,255,0.2); padding:10px; border-radius:10px; font-weight:800; font-size:11px; cursor:pointer\" title=\"Añadir más productos a la cuenta\">
+                        <i class=\"bi bi-plus-circle-fill\" style=\"color:var(--yellow)\"></i> ➕ Añadir a cuenta
                     </button>
-                    <button onclick="sendWhatsAppFiado('${f.cliente.replace(/'/g, "\\'")}', ${f.total}, '${f.detalle.replace(/'/g, "\\'")}')" style="background:#25d366; color:#fff; border:none; padding:10px 14px; border-radius:10px; font-weight:800; font-size:12px; cursor:pointer" title="Recordar por WhatsApp">
-                        <i class="bi bi-whatsapp"></i> WhatsApp
+                    <button onclick=\"sendWhatsAppFiado('${safeClientName}', ${f.total}, '${f.detalle.replace(/'/g, "\\'")}')\" style=\"background:#25d366; color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; font-size:11px; cursor:pointer\" title=\"Recordar cobro por WhatsApp\">
+                        <i class=\"bi bi-whatsapp\"></i> WhatsApp
                     </button>
                 </div>
-            </div>
-        `).join('');
+                <button onclick=\"pagarFiado('${f.id}', '${safeClientName}', ${f.total})\" style=\"width:100%; background:var(--green); color:#fff; border:none; padding:12px; border-radius:10px; font-weight:900; font-size:13px; cursor:pointer; box-shadow:0 4px 12px rgba(16,185,129,0.3)\">
+                    <i class=\"bi bi-check-circle-fill\"></i> Cobrar Deuda Completa
+                </button>
+            </div>`;
+        }).join('');
     }
 
     if (paid.length) {
-        html += `<div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin:20px 0 10px"><i class="bi bi-check-all"></i> Cuentas Pagadas (${paid.length})</div>`;
+        html += `<div style=\"font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin:20px 0 10px\"><i class=\"bi bi-check-all\"></i> Cuentas Pagadas (${paid.length})</div>`;
         html += paid.slice(0, 5).map(f => `
-            <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:12px; margin-bottom:8px; opacity:0.75">
-                <div style="display:flex; justify-content:space-between; align-items:center">
+            <div style=\"background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:12px; margin-bottom:8px; opacity:0.75\">
+                <div style=\"display:flex; justify-content:space-between; align-items:center\">
                     <div>
-                        <div style="font-size:13px; font-weight:800; color:var(--text-primary)">👤 ${f.cliente} <span style="font-size:10px; color:var(--green); font-weight:800">✅ PAGADO</span></div>
-                        <div style="font-size:10px; color:var(--text-muted)">${f.fecha} · ${f.detalle}</div>
+                        <div style=\"font-size:13px; font-weight:800; color:var(--text-primary)\">👤 ${f.cliente} <span style=\"font-size:10px; color:var(--green); font-weight:800\">✅ PAGADO</span></div>
+                        <div style=\"font-size:10px; color:var(--text-muted)\">${f.fecha} · ${f.detalle}</div>
                     </div>
-                    <div style="font-size:14px; font-weight:900; color:var(--green)">$${parseInt(f.total || 0).toLocaleString()}</div>
+                    <div style=\"font-size:14px; font-weight:900; color:var(--green)\">$${parseInt(f.total || 0).toLocaleString()}</div>
                 </div>
             </div>
         `).join('');
     }
 
     container.innerHTML = html;
+}
+
+function addItemsToExistingFiado(cliente) {
+    const cartKeys = Object.keys(cart);
+    if (!cartKeys.length) {
+        setMode('venta');
+        toast(`🛒 Selecciona productos y pulsa "Fiar Venta" para cargarlos a ${cliente}`, 'info');
+        return;
+    }
+    openModal('modal-fiado');
+    document.getElementById('fiado-cliente').value = cliente;
 }
 
 async function pagarFiado(fiadoId, cliente, total) {
@@ -2108,6 +2127,13 @@ function renderGestion(items, container) {
 }
 
 // ===================== RENDER REPORTES & INTELIGENCIA DE TIENDA =====================
+let reportCierresFilter = 'cronologico';
+
+function setReportFilter(filterMode) {
+    reportCierresFilter = filterMode;
+    renderCurrentMode();
+}
+
 function renderReportes(container) {
     const today = new Date();
     const opcionesFecha = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -2118,6 +2144,7 @@ function renderReportes(container) {
     let cantTickets = new Set();
     const salesMap = {};
     const moneyMap = {};
+    const daysOfWeekSales = { 'Domingo': 0, 'Lunes': 0, 'Martes': 0, 'Miércoles': 0, 'Jueves': 0, 'Viernes': 0, 'Sábado': 0 };
 
     historial.forEach(h => {
         const sub = parseInt(h.subtotal || 0);
@@ -2128,12 +2155,41 @@ function renderReportes(container) {
         cantTickets.add(h.id);
         salesMap[prod] = (salesMap[prod] || 0) + cant;
         moneyMap[prod] = (moneyMap[prod] || 0) + sub;
+
+        // Parse date for day of week
+        if (h.fecha) {
+            const parts = h.fecha.split(' ')[0].split('/');
+            if (parts.length === 3) {
+                const dObj = new Date(parts[2], parts[1] - 1, parts[0]);
+                const dayName = dObj.toLocaleDateString('es-CO', { weekday: 'long' });
+                const capDayName = dayName.charAt(0).toUpperCase() + dayName.slice(1);
+                if (daysOfWeekSales[capDayName] !== undefined) {
+                    daysOfWeekSales[capDayName] += sub;
+                }
+            }
+        }
     });
+
+    // Find best day of week
+    let bestDay = 'N/A';
+    let maxDaySales = 0;
+    for (let d in daysOfWeekSales) {
+        if (daysOfWeekSales[d] > maxDaySales) {
+            maxDaySales = daysOfWeekSales[d];
+            bestDay = d;
+        }
+    }
 
     const ticketAvg = cantTickets.size > 0 ? Math.round(totalVentaHistorial / cantTickets.size) : 0;
     const restockItems = inventory.filter(p => parseInt(p.Stock || 0) <= 5);
     const sortedProdsByQty = Object.keys(salesMap).sort((a, b) => salesMap[b] - salesMap[a]);
     const maxQty = sortedProdsByQty.length ? salesMap[sortedProdsByQty[0]] : 1;
+
+    // Process Cierres/Turnos
+    let sortedCierres = [...cierres];
+    if (reportCierresFilter === 'mayor_venta') {
+        sortedCierres.sort((a, b) => parseFloat(b.total || 0) - parseFloat(a.total || 0));
+    }
 
     let html = `
         <!-- Big Date Banner -->
@@ -2159,6 +2215,20 @@ function renderReportes(container) {
             <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:16px; padding:14px">
                 <div style="font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase">Ticket Promedio</div>
                 <div style="font-size:22px; font-weight:900; color:var(--accent); margin-top:4px">$${ticketAvg.toLocaleString()}</div>
+            </div>
+        </div>
+
+        <!-- Best Day of Week Analytics Card -->
+        <div style="background:rgba(13,148,136,0.12); border:1px solid rgba(13,148,136,0.3); border-radius:16px; padding:14px; margin-bottom:20px">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+                <div>
+                    <div style="font-size:11px; font-weight:800; color:#2dd4bf; text-transform:uppercase">Día de Mayor Venta</div>
+                    <div style="font-size:18px; font-weight:900; color:#fff; margin-top:2px">🔥 ${bestDay}</div>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:16px; font-weight:900; color:var(--green)">$${maxDaySales.toLocaleString()}</div>
+                    <div style="font-size:10px; color:var(--text-muted); font-weight:700">Recaudado histórico</div>
+                </div>
             </div>
         </div>
 
@@ -2189,6 +2259,47 @@ function renderReportes(container) {
                                         <div style="width:${pct}%; background:linear-gradient(90deg, #10b981, #059669); height:100%"></div>
                                     </div>
                                     <span style="font-size:11px; font-weight:800; color:var(--text-secondary)">${qty} unids</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `}
+        </div>
+
+        <!-- Cierres / Turnos Ranking Section -->
+        <div style="margin-bottom:24px">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+                <div style="font-size:13px; font-weight:900; text-transform:uppercase; letter-spacing:1px; color:#fff; display:flex; align-items:center; gap:6px">
+                    <i class="bi bi-bar-chart-line-fill" style="color:var(--accent)"></i> Reporte de Cierres / Turnos
+                </div>
+                <div style="display:flex; gap:4px">
+                    <button onclick="setReportFilter('cronologico')" style="background:${reportCierresFilter === 'cronologico' ? 'var(--accent)' : 'rgba(255,255,255,0.08)'}; color:#fff; border:none; padding:4px 10px; border-radius:6px; font-size:10px; font-weight:800; cursor:pointer">
+                        📌 Cronológico
+                    </button>
+                    <button onclick="setReportFilter('mayor_venta')" style="background:${reportCierresFilter === 'mayor_venta' ? '#f59e0b' : 'rgba(255,255,255,0.08)'}; color:#fff; border:none; padding:4px 10px; border-radius:6px; font-size:10px; font-weight:800; cursor:pointer">
+                        🔥 Mayor Venta
+                    </button>
+                </div>
+            </div>
+
+            ${!sortedCierres.length ? '<div class="empty-state">No hay turnos o cierres registrados aún</div>' : `
+                <div style="display:flex; flex-direction:column; gap:10px">
+                    ${sortedCierres.slice(0, 8).map((c, idx) => {
+                        const totalVal = (c.total && c.total !== '-') ? '$' + parseFloat(c.total).toLocaleString() : '-';
+                        return `
+                            <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center">
+                                <div>
+                                    <div style="font-size:13px; font-weight:800; color:#fff">
+                                        ${reportCierresFilter === 'mayor_venta' ? `🔥 #${idx+1} ` : ''}${c.idTurno || 'Turno'}
+                                    </div>
+                                    <div style="font-size:10px; color:var(--text-muted); font-weight:700; margin-top:2px">
+                                        📅 ${c.fechaApertura || c.fecha}
+                                    </div>
+                                </div>
+                                <div style="text-align:right">
+                                    <div style="font-size:16px; font-weight:900; color:var(--green)">${totalVal}</div>
+                                    <div style="font-size:10px; color:var(--text-secondary); font-weight:600">${c.items && c.items !== '-' ? c.items + ' unids' : ''}</div>
                                 </div>
                             </div>
                         `;
