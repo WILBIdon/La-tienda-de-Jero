@@ -258,6 +258,48 @@
             cursor: default;
         }
 
+        /* Cart Stepper in Product Card */
+        .cart-stepper {
+            display: flex;
+            align-items: center;
+            background: rgba(16,185,129,0.12);
+            border: 1px solid rgba(16,185,129,0.3);
+            border-radius: 14px;
+            padding: 2px;
+        }
+        .cart-step-btn {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            border: none;
+            font-size: 18px;
+            font-weight: 900;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: inherit;
+            transition: all 0.15s;
+        }
+        .cart-step-btn:active { transform: scale(0.9); }
+        .cart-step-btn.minus { background: rgba(239,68,68,0.15); color: #ef4444; }
+        .cart-step-btn.plus { background: #10b981; color: white; }
+        .cart-step-num {
+            padding: 0 10px;
+            background: transparent;
+            border: none;
+            color: #10b981;
+            font-weight: 900;
+            font-size: 15px;
+            cursor: pointer;
+            font-family: inherit;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            line-height: 1.1;
+        }
+        .cart-step-num .cart-step-label { font-size: 9px; font-weight: 700; color: rgba(16,185,129,0.8); text-transform: uppercase; }
+
         /* Gestión cards */
         .mgmt-card {
             background: var(--bg-card);
@@ -1395,24 +1437,43 @@ function renderVentas(items, container) {
         const isLow = stock > 0 && stock <= 5;
         const price = parseInt(i['P. Venta'] || 0);
         const inCart = cart[i.Producto]?.qty || 0;
+        const safeName = i.Producto.replace(/'/g, "\\'");
+
+        let actionWidget = '';
+        if (isOut) {
+            actionWidget = `<button disabled class="price-btn disabled-btn">Agotado</button>`;
+        } else if (inCart > 0) {
+            actionWidget = `
+                <div class="cart-stepper">
+                    <button onclick="changeCartQty('${safeName}', -1, ${stock}, ${price})" class="cart-step-btn minus" title="Restar 1">−</button>
+                    <button onclick="promptCartQty('${safeName}', ${stock}, ${price})" class="cart-step-num" title="Toca para ingresar cantidad exacta">
+                        <span>${inCart}</span>
+                        <span class="cart-step-label">unids</span>
+                    </button>
+                    <button onclick="changeCartQty('${safeName}', 1, ${stock}, ${price})" class="cart-step-btn plus" title="Sumar 1">+</button>
+                </div>
+            `;
+        } else {
+            actionWidget = `
+                <button onclick="addToCart('${safeName}', ${price}, ${stock})" class="price-btn active-btn">
+                    +$${price.toLocaleString()}
+                </button>
+            `;
+        }
 
         return `
         <div class="product-card ${inCart > 0 ? 'in-cart' : ''} ${isLow ? 'low-stock' : ''}">
             <div>
                 <div class="name">${i.Producto}</div>
-                ${inCart > 0 ? `<span class="cart-badge">EN CARRITO (${inCart})</span>` : ''}
+                ${inCart > 0 ? `<span class="cart-badge">EN ORDEN (${inCart})</span>` : ''}
                 <div class="meta">Stock: <span class="${isOut ? 'stock-danger' : isLow ? 'stock-warn' : ''}">${stock}</span></div>
             </div>
-            <button onclick="addToCart('${i.Producto.replace(/'/g, "\\'")}', ${price}, ${stock})"
-                ${isOut ? 'disabled' : ''}
-                class="price-btn ${isOut ? 'disabled-btn' : 'active-btn'}">
-                $${price.toLocaleString()}
-            </button>
+            ${actionWidget}
         </div>`;
     }).join('');
 }
 
-// ===================== CART LOGIC =====================
+// ===================== CART & MULTI-QUANTITY LOGIC =====================
 function addToCart(producto, price, stock) {
     if (!cart[producto]) cart[producto] = { qty: 0, price: price };
     if (cart[producto].qty >= stock) {
@@ -1424,12 +1485,59 @@ function addToCart(producto, price, stock) {
     renderCurrentMode();
 }
 
+function changeCartQty(producto, delta, stock, price) {
+    if (!cart[producto]) cart[producto] = { qty: 0, price: price };
+    let newQty = cart[producto].qty + delta;
+    setCartQty(producto, newQty, stock, price);
+}
+
+function setCartQty(producto, newQty, stock, price) {
+    newQty = parseInt(newQty) || 0;
+    if (newQty <= 0) {
+        delete cart[producto];
+        toast(`"${producto}" quitado de la orden`, 'info');
+    } else if (newQty > stock) {
+        if (!cart[producto]) cart[producto] = { qty: stock, price: price };
+        else cart[producto].qty = stock;
+        toast(`Stock máximo disponible: ${stock}`, 'warning');
+    } else {
+        if (!cart[producto]) cart[producto] = { qty: newQty, price: price };
+        else cart[producto].qty = newQty;
+    }
+    updateCartUI();
+    renderCurrentMode();
+    if (document.getElementById('modal-preview')?.classList.contains('show')) {
+        renderPreviewList();
+    }
+}
+
+function promptCartQty(producto, stock, price) {
+    const current = cart[producto]?.qty || 1;
+    const input = prompt(`Cantidad para "${producto}" (Stock max: ${stock}):`, current);
+    if (input !== null && input.trim() !== "") {
+        const parsed = parseInt(input);
+        if (!isNaN(parsed)) {
+            setCartQty(producto, parsed, stock, price);
+        }
+    }
+}
+
+function removeFromCart(producto) {
+    delete cart[producto];
+    updateCartUI();
+    renderCurrentMode();
+    if (document.getElementById('modal-preview')?.classList.contains('show')) {
+        renderPreviewList();
+    }
+    toast(`"${producto}" quitado de la orden`, 'info');
+}
+
 function handleClearCart() {
-    showConfirm('Vaciar Carrito', '¿Eliminar todos los productos del carrito?', () => {
+    showConfirm('Vaciar Carrito', '¿Eliminar todos los productos de la orden?', () => {
         cart = {};
         updateCartUI();
         renderCurrentMode();
-        toast('Carrito vacío', 'info');
+        toast('Orden vaciada', 'info');
     });
 }
 
@@ -1451,24 +1559,58 @@ function updateCartUI() {
     }
 }
 
-// ===================== RECEIPT PREVIEW =====================
+// ===================== ORDEN DE VENTA & RECEIPT PREVIEW =====================
 function openPreview() {
+    renderPreviewList();
+    openModal('modal-preview');
+}
+
+function renderPreviewList() {
     let html = '', total = 0;
-    for (let prod in cart) {
-        let sub = cart[prod].qty * cart[prod].price;
+    const cartKeys = Object.keys(cart);
+
+    if (!cartKeys.length) {
+        closeModal('modal-preview');
+        return;
+    }
+
+    for (let prod of cartKeys) {
+        let qty = cart[prod].qty;
+        let price = cart[prod].price;
+        let sub = qty * price;
         total += sub;
+        
+        // Find stock in inventory
+        const itemObj = inventory.find(i => i.Producto === prod);
+        const stock = itemObj ? parseInt(itemObj.Stock || 9999) : 9999;
+        const safeName = prod.replace(/'/g, "\\'");
+
         html += `
-        <div class="receipt-line">
-            <div style="display:flex;align-items:center;gap:8px">
-                <span class="r-qty">${cart[prod].qty}x</span>
-                <span class="r-name">${prod}</span>
+        <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:14px; padding:12px; margin-bottom:8px">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                <span style="font-weight:700; font-size:14px; color:var(--text-primary)">${prod}</span>
+                <button onclick="removeFromCart('${safeName}')" style="background:none; border:none; color:var(--red); font-size:16px; cursor:pointer; padding:2px">
+                    <i class="bi bi-trash3-fill"></i>
+                </button>
             </div>
-            <span class="r-sub">$${sub.toLocaleString()}</span>
+            <div style="display:flex; justify-content:space-between; align-items:center">
+                <div style="font-size:11px; color:var(--text-muted); font-weight:600">
+                    $${price.toLocaleString()} c/u
+                </div>
+                <div style="display:flex; align-items:center; gap:8px">
+                    <div class="cart-stepper" style="padding:1px">
+                        <button onclick="changeCartQty('${safeName}', -1, ${stock}, ${price})" class="cart-step-btn minus" style="width:32px;height:32px;font-size:16px">−</button>
+                        <input type="number" min="1" max="${stock}" value="${qty}" onchange="setCartQty('${safeName}', this.value, ${stock}, ${price})" 
+                            style="width:48px; text-align:center; background:transparent; border:none; color:#10b981; font-weight:900; font-size:14px; outline:none; font-family:inherit">
+                        <button onclick="changeCartQty('${safeName}', 1, ${stock}, ${price})" class="cart-step-btn plus" style="width:32px;height:32px;font-size:16px">+</button>
+                    </div>
+                    <span style="font-weight:900; color:var(--green); font-size:14px; min-width:70px; text-align:right">$${sub.toLocaleString()}</span>
+                </div>
+            </div>
         </div>`;
     }
     document.getElementById('preview-list').innerHTML = html;
     document.getElementById('preview-total').textContent = '$' + total.toLocaleString();
-    openModal('modal-preview');
 }
 
 async function checkoutCart() {
