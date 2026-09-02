@@ -1791,6 +1791,109 @@ function updateCartUI() {
     }
 }
 
+// ===================== ORDEN DE VENTA & RECEIPT PREVIEW =====================
+function openPreview() {
+    renderPreviewList();
+    openModal('modal-preview');
+}
+
+function renderPreviewList() {
+    let html = '', total = 0;
+    const cartKeys = Object.keys(cart);
+
+    if (!cartKeys.length) {
+        closeModal('modal-preview');
+        return;
+    }
+
+    for (let prod of cartKeys) {
+        let qty = cart[prod].qty;
+        let price = cart[prod].price;
+        let sub = qty * price;
+        total += sub;
+        
+        // Find stock in inventory
+        const itemObj = inventory.find(i => i.Producto === prod);
+        const stock = itemObj ? parseInt(itemObj.Stock || 9999) : 9999;
+        const safeName = prod.replace(/'/g, "\\'");
+
+        html += `
+        <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:14px; padding:12px; margin-bottom:8px">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
+                <span style="font-weight:700; font-size:14px; color:var(--text-primary)">${prod}</span>
+                <button onclick="removeFromCart('${safeName}')" style="background:none; border:none; color:var(--red); font-size:16px; cursor:pointer; padding:2px">
+                    <i class="bi bi-trash3-fill"></i>
+                </button>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center">
+                <div style="font-size:11px; color:var(--text-muted); font-weight:600">
+                    $${price.toLocaleString()} c/u
+                </div>
+                <div style="display:flex; align-items:center; gap:8px">
+                    <div class="cart-stepper" style="padding:1px">
+                        <button onclick="changeCartQty('${safeName}', -1, ${stock}, ${price})" class="cart-step-btn minus" style="width:32px;height:32px;font-size:16px">−</button>
+                        <input type="number" min="1" max="${stock}" value="${qty}" onchange="setCartQty('${safeName}', this.value, ${stock}, ${price})" 
+                            style="width:48px; text-align:center; background:transparent; border:none; color:#10b981; font-weight:900; font-size:14px; outline:none; font-family:inherit">
+                        <button onclick="changeCartQty('${safeName}', 1, ${stock}, ${price})" class="cart-step-btn plus" style="width:32px;height:32px;font-size:16px">+</button>
+                    </div>
+                    <span style="font-weight:900; color:var(--green); font-size:14px; min-width:70px; text-align:right">$${sub.toLocaleString()}</span>
+                </div>
+            </div>
+        </div>`;
+    }
+    document.getElementById('preview-list').innerHTML = html;
+    document.getElementById('preview-total').textContent = '$' + total.toLocaleString();
+}
+
+async function checkoutCart() {
+    const btn = document.getElementById('btn-checkout');
+    btn.innerHTML = '<i class="bi bi-hourglass-split spinning"></i> Procesando...';
+    btn.disabled = true;
+
+    let itemsPayload = [];
+    let receiptLines = [];
+    let total = 0;
+
+    for (let prod in cart) {
+        const sub = cart[prod].qty * cart[prod].price;
+        total += sub;
+        itemsPayload.push({ producto: prod, qty: cart[prod].qty, precio: cart[prod].price, subtotal: sub });
+        receiptLines.push(`${cart[prod].qty}x ${prod} — $${sub.toLocaleString()}`);
+    }
+
+    // Build receipt text for sharing
+    lastReceiptText = `🧾 LA TIENDA EL HUECO\n${new Date().toLocaleString('es-CO')}\n${'─'.repeat(24)}\n${receiptLines.join('\n')}\n${'─'.repeat(24)}\nTOTAL: $${total.toLocaleString()}\n\n¡Gracias por tu compra!`;
+
+    try {
+        await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "checkout", items: itemsPayload }) });
+        cart = {};
+        updateCartUI();
+        closeModal('modal-preview');
+
+        // Show success modal
+        document.getElementById('success-msg').textContent = `Venta de $${total.toLocaleString()} procesada`;
+        document.getElementById('success-receipt').innerHTML = receiptLines.map(l =>
+            `<div style="font-size:12px;color:var(--text-secondary);padding:2px 0;font-weight:600">${l}</div>`
+        ).join('');
+        openModal('modal-success');
+
+        await syncData();
+    } catch(e) {
+        toast('Error al procesar la venta', 'error');
+    } finally {
+        btn.innerHTML = '💵 Cobrar en Efectivo <i class="bi bi-check-circle-fill"></i>';
+        btn.disabled = false;
+    }
+}
+
+function shareReceipt() {
+    if (navigator.share) {
+        navigator.share({ title: 'Recibo — La Tienda El Hueco', text: lastReceiptText }).catch(() => {});
+    } else {
+        navigator.clipboard.writeText(lastReceiptText).then(() => toast('Recibo copiado al portapapeles', 'success'));
+    }
+}
+
 // ===================== FIADOS (CUENTAS POR COBRAR) =====================
 function openFiadoModal() {
     const cartKeys = Object.keys(cart);
