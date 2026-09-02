@@ -93,18 +93,20 @@ Retorna JSON:
 - ✅ **Búsqueda** de productos en tiempo real
 - ✅ Contraseñas: Admin=1234, Auditoría=4321
 
-## Mejoras Implementadas (v2) ✅
+## Mejoras Implementadas (v2 & v3) ✅
 
+- [x] **⭐ Productos Favoritos Arriba**: Auto-ordenamiento por volumen de ventas en el Historial para mostrar lo más vendido primero con insignia `⭐ TOP`.
+- [x] **📝 Sistema de Fiados (Cuentas por cobrar)**: Pestaña `Fiados 📋` dedicada para registrar deudas por cliente, ver total adeudado, marcar como PAGADO y enviar recordatorio automático por WhatsApp `💬`.
+- [x] **⚡ Venta Rápida 1-Tap**: Botón directo en la tarjeta del producto para registrar 1 unidad en efectivo al instante sin abrir el carrito.
+- [x] **🔢 Selector de Cantidad Personalizado**: Mini-modal táctil con botones rápidos (`x1`, `x2`, `x3`, `x5`, `x10`, `Máx`) eliminando los `prompt()` feos del navegador.
+- [x] **📦 Gestión de Stock de Gran Tamaño**: Botones `+1`, `+5`, `+10`, `-1`, `-5` táctiles en cada producto.
 - [x] **Botón de Apertura/Cierre en la Cabecera**: Acceso directo arriba junto al nombre (`🟢 ABIERTO` / `🔴 CERRADO`) protegido por PIN `1234`.
-- [x] **Bitácora Inalterable de Auditoría**: Hoja permanente en Google Sheets que registra absolutamente todo (aperturas, cierres, reversiones, cambios de precios, eliminaciones). **NO SE BORRA NUNCA**, ni al anular o revertir ventas.
-- [x] **Cambio de Precios Protegido**: Botón `🏷️ Cambiar Precio (PIN)` en cada tarjeta de gestión para actualizar Costo y Precio de Venta con PIN `1234`.
-- [x] **Carga masiva de inventario** — textarea con parser inteligente (auto-detecta formato).
-- [x] **Dashboard resumen del día** — ventas, tickets, alertas stock bajo.
-- [x] **Alertas stock bajo** — visual en ventas y gestión (≤5 unidades).
-- [x] **Toast notifications** — reemplazar alert() del navegador.
-- [x] **PIN Pad visual** — reemplazar prompt() del navegador.
-- [x] **Recibo compartible** — Web Share API + copiar texto.
-- [x] **Mejoras mobile UX** — dark mode premium, botones grandes, animaciones por módulo.
+- [x] **Bitácora Inalterable de Auditoría**: Hoja permanente en Google Sheets (`Bitacora Inalterable`) que registra absolutamente todo. **NO SE BORRA NUNCA**.
+- [x] **Cambio de Precios Protegido**: Botón `🏷️ Cambiar Precio (PIN)` en cada tarjeta de gestión.
+- [x] **Carga masiva de inventario** — textarea con parser inteligente.
+- [x] **Dashboard resumen del día** — ventas, tickets, cuentas fiadas, alertas stock bajo.
+- [x] **Toast notifications & PIN Pad visual** — UI limpia y moderna sin popups del navegador.
+- [x] **Recibo compartible** — Web Share API + copiar texto para WhatsApp.
 - [x] **Cache offline** — localStorage como fallback.
 
 ## Contraseñas del Sistema

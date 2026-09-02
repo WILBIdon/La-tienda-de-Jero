@@ -52,8 +52,11 @@
             box-shadow: 0 8px 32px rgba(0,0,0,0.4);
             transition: background 0.3s ease;
         }
-        header.mode-venta {
+"        header.mode-venta {
             background: linear-gradient(135deg, #064e3b, #047857);
+        }
+        header.mode-fiados {
+            background: linear-gradient(135deg, #1e3a8a, #2563eb);
         }
         header.mode-gestion {
             background: linear-gradient(135deg, #78350f, #b45309);
@@ -139,6 +142,11 @@
             color: #fff;
             box-shadow: 0 4px 12px rgba(16,185,129,0.3);
         }
+        .tab-btn.active#tab-fiados {
+            background: #2563eb;
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(37,99,235,0.3);
+        }
         .tab-btn.active#tab-gestion {
             background: #f59e0b;
             color: #fff;
@@ -149,6 +157,64 @@
             color: #fff;
             box-shadow: 0 4px 12px rgba(139,92,246,0.3);
         }
+
+        /* Fast Sell & Custom Picker Styles */
+        .fast-sell-btn {
+            background: rgba(34, 197, 94, 0.15);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: var(--green);
+            padding: 6px 10px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 800;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.15s;
+        }
+        .fast-sell-btn:active { transform: scale(0.92); background: rgba(34, 197, 94, 0.3); }
+
+        .step-qty-btn {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .step-qty-btn:active { transform: scale(0.9); background: var(--accent); color: white; }
+
+        .preset-qty-btn {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 8px 0;
+            border-radius: 10px;
+            font-size: 12px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        .preset-qty-btn:active { transform: scale(0.92); background: var(--accent); color: white; }
+        .preset-qty-btn.max-btn { background: rgba(245,158,11,0.2); color: var(--yellow); border-color: rgba(245,158,11,0.4); }
+
+        .stock-step-btn {
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 4px 8px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: all 0.12s;
+        }
+        .stock-step-btn:active { background: var(--accent); color: white; }"
 
         /* ========== MAIN ========== */
         main {
@@ -890,9 +956,10 @@
             </div>
         </div>
         <div class="tabs">
-            <button onclick="setMode('venta')" id="tab-venta" class="tab-btn active">Ventas</button>
-            <button onclick="setMode('gestion')" id="tab-gestion" class="tab-btn">Gestión</button>
-            <button onclick="setMode('historial')" id="tab-historial" class="tab-btn">Historial</button>
+            <button onclick="setMode('venta')" id="tab-venta" class="tab-btn active">Ventas 🛒</button>
+            <button onclick="setMode('fiados')" id="tab-fiados" class="tab-btn">Fiados 📋</button>
+            <button onclick="setMode('gestion')" id="tab-gestion" class="tab-btn">Stock 📦</button>
+            <button onclick="setMode('historial')" id="tab-historial" class="tab-btn">Cierres 📜</button>
         </div>
         <div style="height:16px"></div>
     </header>
@@ -1018,10 +1085,87 @@
                 <span class="lbl">Total a pagar:</span>
                 <span class="val" id="preview-total">$0</span>
             </div>
-            <div class="receipt-actions">
+            <div class="receipt-actions" style="display:grid; grid-template-columns: 1fr 1fr; gap:8px">
                 <button class="btn-back" onclick="closeModal('modal-preview')">Volver</button>
-                <button class="btn-confirm" id="btn-checkout" onclick="checkoutCart()">Confirmar <i class="bi bi-check-circle-fill"></i></button>
+                <button type="button" onclick="openFiadoModal()" style="background:var(--yellow); color:#000; font-weight:800; border:none; border-radius:14px; padding:12px; font-size:12px; cursor:pointer">
+                    📝 Fiar Venta
+                </button>
+                <button class="btn-confirm" id="btn-checkout" onclick="checkoutCart()" style="grid-column: 1 / -1">
+                    💵 Cobrar en Efectivo <i class="bi bi-check-circle-fill"></i>
+                </button>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal: Custom Quantity Picker (Replaces prompt) -->
+    <div class="modal-overlay" id="modal-qty-picker">
+        <div class="modal-sheet" style="text-align:center">
+            <div class="modal-header" style="justify-content:center; flex-direction:column; gap:4px">
+                <h2 id="qp-prod-name" style="font-size:18px; font-weight:900; color:var(--text-primary)">Producto</h2>
+                <div style="font-size:12px; color:var(--text-muted); font-weight:700">
+                    Precio: <span id="qp-prod-price" style="color:var(--green)">$0</span> · Stock máximo: <span id="qp-prod-stock">0</span>
+                </div>
+            </div>
+            
+            <div style="margin:20px 0">
+                <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:16px">
+                    <button type="button" onclick="stepQtyPicker(-5)" class="step-qty-btn">-5</button>
+                    <button type="button" onclick="stepQtyPicker(-1)" class="step-qty-btn">-1</button>
+                    <input type="number" id="qp-input-qty" min="1" value="1" oninput="updateQtyPickerUI()"
+                        style="width:80px; text-align:center; background:rgba(0,0,0,0.4); border:2px solid var(--accent); border-radius:14px; color:#fff; font-size:26px; font-weight:900; padding:8px 0; outline:none; font-family:inherit">
+                    <button type="button" onclick="stepQtyPicker(1)" class="step-qty-btn">+1</button>
+                    <button type="button" onclick="stepQtyPicker(5)" class="step-qty-btn">+5</button>
+                </div>
+
+                <div style="display:grid; grid-template-columns: repeat(6, 1fr); gap:6px; margin-bottom:16px">
+                    <button type="button" onclick="setQtyPickerPreset(1)" class="preset-qty-btn">x1</button>
+                    <button type="button" onclick="setQtyPickerPreset(2)" class="preset-qty-btn">x2</button>
+                    <button type="button" onclick="setQtyPickerPreset(3)" class="preset-qty-btn">x3</button>
+                    <button type="button" onclick="setQtyPickerPreset(5)" class="preset-qty-btn">x5</button>
+                    <button type="button" onclick="setQtyPickerPreset(10)" class="preset-qty-btn">x10</button>
+                    <button type="button" onclick="setQtyPickerPreset('max')" class="preset-qty-btn max-btn">Máx</button>
+                </div>
+                
+                <div style="font-size:13px; font-weight:800; color:var(--text-secondary)">
+                    Subtotal: <span id="qp-subtotal" style="color:var(--green); font-size:18px; font-weight:900">$0</span>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px">
+                <button type="button" class="btn-back" onclick="closeModal('modal-qty-picker')">Cancelar</button>
+                <button type="button" class="btn-confirm" onclick="confirmQtyPicker()">✓ Guardar Cantidad</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Register Fiado (Customer Debt) -->
+    <div class="modal-overlay" id="modal-fiado">
+        <div class="modal-sheet">
+            <div class="modal-header">
+                <h2>📝 Registrar Fiado (Deuda)</h2>
+                <button class="modal-close" onclick="closeModal('modal-fiado')"><i class="bi bi-x-circle-fill"></i></button>
+            </div>
+            <form id="fiadoForm" onsubmit="submitFiado(event)">
+                <div class="field">
+                    <label>Nombre del Cliente (¿A quién se le fía?)</label>
+                    <input type="text" id="fiado-cliente" required placeholder="Ej: Doña María, Don Carlos, Vecino..." list="fiado-clientes-list">
+                    <datalist id="fiado-clientes-list"></datalist>
+                </div>
+                <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:14px; padding:14px; margin:16px 0">
+                    <div style="font-size:11px; font-weight:800; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px">Resumen del Fiado</div>
+                    <div id="fiado-items-summary" style="font-size:12px; color:var(--text-secondary); font-weight:600; max-height:120px; overflow-y:auto; margin-bottom:8px"></div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; border-top:1px solid var(--border); padding-top:8px">
+                        <span style="font-size:13px; font-weight:800">Total a Deber:</span>
+                        <span id="fiado-total-amount" style="font-size:18px; font-weight:900; color:var(--yellow)">$0</span>
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px">
+                    <button type="button" class="btn-back" onclick="closeModal('modal-fiado')">Cancelar</button>
+                    <button type="submit" class="submit-btn" id="btn-fiado-submit" style="flex:1; background:var(--yellow); color:#000">
+                        Guardar Fiado <i class="bi bi-file-earmark-check-fill"></i>
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -1092,6 +1236,7 @@ let inventory = [];
 let historial = [];
 let cierres = [];
 let bitacora = [];
+let fiados = [];
 let cart = {};
 let currentMode = 'venta';
 let isStoreOpen = true;
@@ -1099,6 +1244,7 @@ let lastStateTime = '';
 let showLowStockOnly = false;
 let bulkParsedItems = [];
 let lastReceiptText = '';
+let activeQtyPickerProd = null;
 
 // PIN state
 let pinBuffer = '';
@@ -1256,10 +1402,7 @@ async function submitEditPrice(event) {
         nuevoCosto: costo,
         nuevoVenta: venta
     });
-    toast(`Producto "${nuevoNombre}" actualizado`, 'success');
-}
-
-// ===================== TABS & MODULE COLOR SWITCHING =====================
+    toast(`Prod"// ===================== TABS & MODULE COLOR SWITCHING =====================
 function setMode(mode) {
     currentMode = mode;
     showLowStockOnly = false;
@@ -1268,13 +1411,14 @@ function setMode(mode) {
     const header = document.getElementById('main-header');
     header.className = 'mode-' + mode;
 
-    ['venta', 'gestion', 'historial'].forEach(m => {
-        document.getElementById('tab-' + m).classList.toggle('active', m === mode);
+    ['venta', 'fiados', 'gestion', 'historial'].forEach(m => {
+        document.getElementById('tab-' + m)?.classList.toggle('active', m === mode);
     });
-    document.getElementById('search-container').style.display = mode === 'historial' ? 'none' : '';
+    document.getElementById('search-container').style.display = (mode === 'historial' || mode === 'fiados') ? 'none' : '';
     
     document.getElementById('mode-text').textContent =
         mode === 'venta' ? 'Punto de Venta 🛒' :
+        mode === 'fiados' ? 'Fiados & Cuentas 📋' :
         mode === 'gestion' ? 'Control de Stock 📦' :
         'Auditoría & Cierres 📊';
 
@@ -1305,12 +1449,14 @@ async function syncData() {
             historial = [];
             cierres = [];
             bitacora = [];
+            fiados = [];
             isStoreOpen = true;
         } else {
             inventory = data.inventario || [];
             historial = data.historial || [];
             cierres = data.cierres || [];
             bitacora = data.bitacora || [];
+            fiados = data.fiados || [];
             if (data.clock) {
                 isStoreOpen = (data.clock.state === "OPEN");
                 lastStateTime = data.clock.lastStateTime || '';
@@ -1325,6 +1471,7 @@ async function syncData() {
             localStorage.setItem('pos_historial', JSON.stringify(historial));
             localStorage.setItem('pos_cierres', JSON.stringify(cierres));
             localStorage.setItem('pos_bitacora', JSON.stringify(bitacora));
+            localStorage.setItem('pos_fiados', JSON.stringify(fiados));
             localStorage.setItem('pos_storeOpen', JSON.stringify(isStoreOpen));
             localStorage.setItem('pos_lastStateTime', lastStateTime);
             localStorage.setItem('pos_lastSync', new Date().toISOString());
@@ -1340,6 +1487,7 @@ async function syncData() {
                 historial = JSON.parse(localStorage.getItem('pos_historial') || '[]');
                 cierres = JSON.parse(localStorage.getItem('pos_cierres') || '[]');
                 bitacora = JSON.parse(localStorage.getItem('pos_bitacora') || '[]');
+                fiados = JSON.parse(localStorage.getItem('pos_fiados') || '[]');
                 isStoreOpen = JSON.parse(localStorage.getItem('pos_storeOpen') || 'true');
                 lastStateTime = localStorage.getItem('pos_lastStateTime') || '';
                 updateShiftBadgeUI();
@@ -1366,6 +1514,9 @@ function renderCurrentMode() {
     if (currentMode === 'venta') {
         renderDashboard();
         renderVentas(filtered, grid);
+    } else if (currentMode === 'fiados') {
+        renderDashboard();
+        renderFiados(grid);
     } else if (currentMode === 'gestion') {
         document.getElementById('dashboard').innerHTML = '';
         renderGestion(filtered, grid);
@@ -1382,20 +1533,19 @@ function renderDashboard() {
 
     let ventasHoy = 0;
     let ticketsHoy = new Set();
-    const today = new Date().toLocaleDateString('es-CO');
-
     historial.forEach(h => {
-        if ((h.fecha || '').includes(today.substring(0, 5)) || true) {
-            // Count all for now since we can't perfectly match date formats
-            ventasHoy += parseInt(h.subtotal || 0);
-            ticketsHoy.add(h.id);
-        }
+        ventasHoy += parseInt(h.subtotal || 0);
+        ticketsHoy.add(h.id);
     });
 
     const lowStock = inventory.filter(p => parseInt(p.Stock || 0) <= 5).length;
+    let pendingFiadosTotal = 0;
+    fiados.filter(f => f.estado === 'PENDIENTE').forEach(f => {
+        pendingFiadosTotal += parseInt(f.total || 0);
+    });
 
     dash.innerHTML = `
-        <div class="dashboard">
+        <div class="dashboard" style="grid-template-columns: repeat(4, 1fr)">
             <div class="dash-card">
                 <div class="label">Ventas</div>
                 <div class="value green">$${ventasHoy.toLocaleString()}</div>
@@ -1407,6 +1557,10 @@ function renderDashboard() {
             <div class="dash-card">
                 <div class="label">Bajo Stock</div>
                 <div class="value ${lowStock > 0 ? 'red' : ''}">${lowStock}</div>
+            </div>
+            <div class="dash-card" onclick="setMode('fiados')" style="cursor:pointer" title="Ver Cuentas por Cobrar">
+                <div class="label">Fiados</div>
+                <div class="value ${pendingFiadosTotal > 0 ? 'yellow' : ''}">$${pendingFiadosTotal.toLocaleString()}</div>
             </div>
         </div>
     `;
@@ -1431,6 +1585,18 @@ function renderVentas(items, container) {
 
     if (!items.length) { container.innerHTML = '<div class="empty-state">No hay productos</div>'; return; }
 
+    // Frequency of sales for top favorites auto-sort
+    const salesMap = {};
+    historial.forEach(h => {
+        const prod = h.producto || '';
+        salesMap[prod] = (salesMap[prod] || 0) + (parseInt(h.cantidad) || 1);
+    });
+
+    const query = (document.getElementById('searchInput')?.value || "").trim();
+    if (!query) {
+        items.sort((a, b) => (salesMap[b.Producto] || 0) - (salesMap[a.Producto] || 0));
+    }
+
     container.innerHTML = items.map(i => {
         const stock = parseInt(i.Stock || 0);
         const isOut = stock <= 0;
@@ -1438,6 +1604,8 @@ function renderVentas(items, container) {
         const price = parseInt(i['P. Venta'] || 0);
         const inCart = cart[i.Producto]?.qty || 0;
         const safeName = i.Producto.replace(/'/g, "\\'");
+        const salesCount = salesMap[i.Producto] || 0;
+        const isTop = salesCount >= 3;
 
         let actionWidget = '';
         if (isOut) {
@@ -1446,7 +1614,7 @@ function renderVentas(items, container) {
             actionWidget = `
                 <div class="cart-stepper">
                     <button onclick="changeCartQty('${safeName}', -1, ${stock}, ${price})" class="cart-step-btn minus" title="Restar 1">−</button>
-                    <button onclick="promptCartQty('${safeName}', ${stock}, ${price})" class="cart-step-num" title="Toca para ingresar cantidad exacta">
+                    <button onclick="openQtyPicker('${safeName}', ${inCart}, ${stock}, ${price})" class="cart-step-num" title="Toca para ingresar cantidad exacta">
                         <span>${inCart}</span>
                         <span class="cart-step-label">unids</span>
                     </button>
@@ -1455,16 +1623,23 @@ function renderVentas(items, container) {
             `;
         } else {
             actionWidget = `
-                <button onclick="addToCart('${safeName}', ${price}, ${stock})" class="price-btn active-btn">
-                    +$${price.toLocaleString()}
-                </button>
+                <div style="display:flex; align-items:center; gap:6px">
+                    <button onclick="fastCheckoutSingleItem('${safeName}', ${price}, ${stock})" class="fast-sell-btn" title="Venta rápida de 1 toque (1 unid sin pasar por cobrar)">
+                        ⚡ 1-Tap
+                    </button>
+                    <button onclick="addToCart('${safeName}', ${price}, ${stock})" class="price-btn active-btn">
+                        +$${price.toLocaleString()}
+                    </button>
+                </div>
             `;
         }
 
         return `
         <div class="product-card ${inCart > 0 ? 'in-cart' : ''} ${isLow ? 'low-stock' : ''}">
             <div>
-                <div class="name">${i.Producto}</div>
+                <div class="name">
+                    ${isTop ? '<span style="color:var(--yellow); font-size:12px" title="Más vendido">⭐</span> ' : ''}${i.Producto}
+                </div>
                 ${inCart > 0 ? `<span class="cart-badge">EN ORDEN (${inCart})</span>` : ''}
                 <div class="meta">Stock: <span class="${isOut ? 'stock-danger' : isLow ? 'stock-warn' : ''}">${stock}</span></div>
             </div>
@@ -1473,7 +1648,72 @@ function renderVentas(items, container) {
     }).join('');
 }
 
-// ===================== CART & MULTI-QUANTITY LOGIC =====================
+// ===================== FAST SINGLE-TAP SALE =====================
+async function fastCheckoutSingleItem(producto, price, stock) {
+    if (!isStoreOpen) { toast('La caja está cerrada', 'warning'); return; }
+    if (stock <= 0) { toast('Producto agotado', 'warning'); return; }
+
+    const itemsPayload = [{ producto: producto, qty: 1, precio: price, subtotal: price }];
+    toast(`⚡ Procesando venta rápida: ${producto}...`, 'info');
+
+    try {
+        await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "checkout", items: itemsPayload }) });
+        toast(`⚡ ¡Venta rápida de 1x ${producto} ($${price.toLocaleString()}) registrada!`, 'success');
+        await syncData();
+    } catch(e) {
+        toast('Error en venta rápida', 'error');
+    }
+}
+
+// ===================== CUSTOM QUANTITY PICKER (REPLACES PROMPT) =====================
+function openQtyPicker(producto, currentQty, stock, price) {
+    activeQtyPickerProd = { producto, stock, price };
+    document.getElementById('qp-prod-name').textContent = producto;
+    document.getElementById('qp-prod-price').textContent = '$' + parseInt(price).toLocaleString();
+    document.getElementById('qp-prod-stock').textContent = stock;
+    document.getElementById('qp-input-qty').value = currentQty || 1;
+    updateQtyPickerUI();
+    openModal('modal-qty-picker');
+}
+
+function stepQtyPicker(delta) {
+    if (!activeQtyPickerProd) return;
+    const input = document.getElementById('qp-input-qty');
+    let val = (parseInt(input.value) || 1) + delta;
+    if (val < 1) val = 1;
+    if (val > activeQtyPickerProd.stock) val = activeQtyPickerProd.stock;
+    input.value = val;
+    updateQtyPickerUI();
+}
+
+function setQtyPickerPreset(preset) {
+    if (!activeQtyPickerProd) return;
+    const input = document.getElementById('qp-input-qty');
+    let val = preset === 'max' ? activeQtyPickerProd.stock : parseInt(preset);
+    if (val > activeQtyPickerProd.stock) val = activeQtyPickerProd.stock;
+    if (val < 1) val = 1;
+    input.value = val;
+    updateQtyPickerUI();
+}
+
+function updateQtyPickerUI() {
+    if (!activeQtyPickerProd) return;
+    const input = document.getElementById('qp-input-qty');
+    let val = parseInt(input.value) || 1;
+    const sub = val * activeQtyPickerProd.price;
+    document.getElementById('qp-subtotal').textContent = '$' + sub.toLocaleString();
+}
+
+function confirmQtyPicker() {
+    if (!activeQtyPickerProd) return;
+    const input = document.getElementById('qp-input-qty');
+    const qty = parseInt(input.value) || 1;
+    setCartQty(activeQtyPickerProd.producto, qty, activeQtyPickerProd.stock, activeQtyPickerProd.price);
+    closeModal('modal-qty-picker');
+    activeQtyPickerProd = null;
+}
+
+// ===================== CART LOGIC =====================
 function addToCart(producto, price, stock) {
     if (!cart[producto]) cart[producto] = { qty: 0, price: price };
     if (cart[producto].qty >= stock) {
@@ -1508,17 +1748,6 @@ function setCartQty(producto, newQty, stock, price) {
     renderCurrentMode();
     if (document.getElementById('modal-preview')?.classList.contains('show')) {
         renderPreviewList();
-    }
-}
-
-function promptCartQty(producto, stock, price) {
-    const current = cart[producto]?.qty || 1;
-    const input = prompt(`Cantidad para "${producto}" (Stock max: ${stock}):`, current);
-    if (input !== null && input.trim() !== "") {
-        const parsed = parseInt(input);
-        if (!isNaN(parsed)) {
-            setCartQty(producto, parsed, stock, price);
-        }
     }
 }
 
@@ -1559,107 +1788,154 @@ function updateCartUI() {
     }
 }
 
-// ===================== ORDEN DE VENTA & RECEIPT PREVIEW =====================
-function openPreview() {
-    renderPreviewList();
-    openModal('modal-preview');
-}
-
-function renderPreviewList() {
-    let html = '', total = 0;
+// ===================== FIADOS (CUENTAS POR COBRAR) =====================
+function openFiadoModal() {
     const cartKeys = Object.keys(cart);
+    if (!cartKeys.length) { toast('El carrito está vacío', 'warning'); return; }
 
-    if (!cartKeys.length) {
-        closeModal('modal-preview');
-        return;
-    }
-
+    let total = 0;
+    let summaryHTML = '';
     for (let prod of cartKeys) {
-        let qty = cart[prod].qty;
-        let price = cart[prod].price;
-        let sub = qty * price;
+        let sub = cart[prod].qty * cart[prod].price;
         total += sub;
-        
-        // Find stock in inventory
-        const itemObj = inventory.find(i => i.Producto === prod);
-        const stock = itemObj ? parseInt(itemObj.Stock || 9999) : 9999;
-        const safeName = prod.replace(/'/g, "\\'");
-
-        html += `
-        <div style="background:rgba(255,255,255,0.04); border:1px solid var(--border); border-radius:14px; padding:12px; margin-bottom:8px">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px">
-                <span style="font-weight:700; font-size:14px; color:var(--text-primary)">${prod}</span>
-                <button onclick="removeFromCart('${safeName}')" style="background:none; border:none; color:var(--red); font-size:16px; cursor:pointer; padding:2px">
-                    <i class="bi bi-trash3-fill"></i>
-                </button>
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:center">
-                <div style="font-size:11px; color:var(--text-muted); font-weight:600">
-                    $${price.toLocaleString()} c/u
-                </div>
-                <div style="display:flex; align-items:center; gap:8px">
-                    <div class="cart-stepper" style="padding:1px">
-                        <button onclick="changeCartQty('${safeName}', -1, ${stock}, ${price})" class="cart-step-btn minus" style="width:32px;height:32px;font-size:16px">−</button>
-                        <input type="number" min="1" max="${stock}" value="${qty}" onchange="setCartQty('${safeName}', this.value, ${stock}, ${price})" 
-                            style="width:48px; text-align:center; background:transparent; border:none; color:#10b981; font-weight:900; font-size:14px; outline:none; font-family:inherit">
-                        <button onclick="changeCartQty('${safeName}', 1, ${stock}, ${price})" class="cart-step-btn plus" style="width:32px;height:32px;font-size:16px">+</button>
-                    </div>
-                    <span style="font-weight:900; color:var(--green); font-size:14px; min-width:70px; text-align:right">$${sub.toLocaleString()}</span>
-                </div>
-            </div>
-        </div>`;
+        summaryHTML += `<div style="display:flex; justify-content:space-between; padding:2px 0">${cart[prod].qty}x ${prod} <span>$${sub.toLocaleString()}</span></div>`;
     }
-    document.getElementById('preview-list').innerHTML = html;
-    document.getElementById('preview-total').textContent = '$' + total.toLocaleString();
+
+    document.getElementById('fiado-items-summary').innerHTML = summaryHTML;
+    document.getElementById('fiado-total-amount').textContent = '$' + total.toLocaleString();
+
+    const existingClients = [...new Set(fiados.map(f => f.cliente))];
+    document.getElementById('fiado-clientes-list').innerHTML = existingClients.map(c => `<option value="${c}">`).join('');
+
+    closeModal('modal-preview');
+    openModal('modal-fiado');
 }
 
-async function checkoutCart() {
-    const btn = document.getElementById('btn-checkout');
-    btn.innerHTML = '<i class="bi bi-hourglass-split spinning"></i> Procesando...';
-    btn.disabled = true;
+async function submitFiado(event) {
+    event.preventDefault();
+    const cliente = document.getElementById('fiado-cliente').value.trim();
+    if (!cliente) return;
 
     let itemsPayload = [];
-    let receiptLines = [];
+    let itemsTextArr = [];
     let total = 0;
 
     for (let prod in cart) {
         const sub = cart[prod].qty * cart[prod].price;
         total += sub;
         itemsPayload.push({ producto: prod, qty: cart[prod].qty, precio: cart[prod].price, subtotal: sub });
-        receiptLines.push(`${cart[prod].qty}x ${prod} — $${sub.toLocaleString()}`);
+        itemsTextArr.push(`${cart[prod].qty}x ${prod} ($${sub.toLocaleString()})`);
     }
 
-    // Build receipt text for sharing
-    lastReceiptText = `🧾 LA TIENDA EL HUECO\n${new Date().toLocaleString('es-CO')}\n${'─'.repeat(24)}\n${receiptLines.join('\n')}\n${'─'.repeat(24)}\nTOTAL: $${total.toLocaleString()}\n\n¡Gracias por tu compra!`;
+    const btn = document.getElementById('btn-fiado-submit');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="bi bi-hourglass-split spinning"></i> Guardando...';
 
     try {
-        await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "checkout", items: itemsPayload }) });
+        await fetch(GAS_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+                action: "crear_fiado",
+                cliente: cliente,
+                detalle: itemsTextArr.join(', '),
+                total: total,
+                items: itemsPayload
+            })
+        });
+
         cart = {};
         updateCartUI();
-        closeModal('modal-preview');
-
-        // Show success
-        document.getElementById('success-msg').textContent = `Venta de $${total.toLocaleString()} procesada`;
-        document.getElementById('success-receipt').innerHTML = receiptLines.map(l =>
-            `<div style="font-size:12px;color:var(--text-secondary);padding:2px 0;font-weight:600">${l}</div>`
-        ).join('');
-        openModal('modal-success');
-
+        closeModal('modal-fiado');
+        toast(`📝 Fiado a "${cliente}" por $${total.toLocaleString()} registrado`, 'success');
         await syncData();
     } catch(e) {
-        toast('Error al procesar la venta', 'error');
+        toast('Error al guardar fiado', 'error');
     } finally {
-        btn.innerHTML = 'Confirmar <i class="bi bi-check-circle-fill"></i>';
         btn.disabled = false;
+        btn.innerHTML = 'Guardar Fiado <i class="bi bi-file-earmark-check-fill"></i>';
     }
 }
 
-function shareReceipt() {
-    if (navigator.share) {
-        navigator.share({ title: 'Recibo — La Tienda El Hueco', text: lastReceiptText }).catch(() => {});
-    } else {
-        navigator.clipboard.writeText(lastReceiptText).then(() => toast('Recibo copiado al portapapeles', 'success'));
+function renderFiados(container) {
+    const pending = fiados.filter(f => f.estado === 'PENDIENTE');
+    const paid = fiados.filter(f => f.estado === 'PAGADO');
+
+    let totalPendingMoney = pending.reduce((acc, f) => acc + parseInt(f.total || 0), 0);
+
+    let html = `
+        <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:16px; text-align:center">
+            <div style="font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px">Total Cuentas Pendientes por Cobrar</div>
+            <div style="font-size:28px; font-weight:900; color:var(--yellow); margin-top:4px">$${totalPendingMoney.toLocaleString()}</div>
+            <div style="font-size:11px; color:var(--text-secondary); font-weight:700; margin-top:2px">${pending.length} clientes por cobrar</div>
+        </div>
+    `;
+
+    if (!pending.length && !paid.length) {
+        container.innerHTML = html + '<div class="empty-state">No hay cuentas fiadas registradas</div>';
+        return;
     }
+
+    if (pending.length) {
+        html += `<div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--yellow); margin-bottom:10px"><i class="bi bi-exclamation-circle-fill"></i> Pendientes de Pago (${pending.length})</div>`;
+        html += pending.map(f => `
+            <div style="background:var(--bg-card); border:1px solid rgba(245,158,11,0.3); border-radius:14px; padding:14px; margin-bottom:10px">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px">
+                    <div>
+                        <div style="font-size:16px; font-weight:900; color:#fff">👤 ${f.cliente}</div>
+                        <div style="font-size:10px; color:var(--text-muted); font-weight:700">${f.fecha}</div>
+                    </div>
+                    <div style="font-size:18px; font-weight:900; color:var(--yellow)">$${parseInt(f.total || 0).toLocaleString()}</div>
+                </div>
+                <div style="font-size:12px; color:var(--text-secondary); font-weight:600; margin-bottom:12px; background:rgba(0,0,0,0.2); padding:8px; border-radius:8px">
+                    ${f.detalle}
+                </div>
+                <div style="display:flex; gap:8px">
+                    <button onclick="pagarFiado('${f.id}', '${f.cliente.replace(/'/g, "\\'")}', ${f.total})" style="flex:1; background:var(--green); color:#fff; border:none; padding:10px; border-radius:10px; font-weight:800; font-size:12px; cursor:pointer">
+                        <i class="bi bi-check-circle-fill"></i> Cobrar Deuda
+                    </button>
+                    <button onclick="sendWhatsAppFiado('${f.cliente.replace(/'/g, "\\'")}', ${f.total}, '${f.detalle.replace(/'/g, "\\'")}')" style="background:#25d366; color:#fff; border:none; padding:10px 14px; border-radius:10px; font-weight:800; font-size:12px; cursor:pointer" title="Recordar por WhatsApp">
+                        <i class="bi bi-whatsapp"></i> WhatsApp
+                    </button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    if (paid.length) {
+        html += `<div style="font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin:20px 0 10px"><i class="bi bi-check-all"></i> Cuentas Pagadas (${paid.length})</div>`;
+        html += paid.slice(0, 5).map(f => `
+            <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:12px; margin-bottom:8px; opacity:0.75">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                    <div>
+                        <div style="font-size:13px; font-weight:800; color:var(--text-primary)">👤 ${f.cliente} <span style="font-size:10px; color:var(--green); font-weight:800">✅ PAGADO</span></div>
+                        <div style="font-size:10px; color:var(--text-muted)">${f.fecha} · ${f.detalle}</div>
+                    </div>
+                    <div style="font-size:14px; font-weight:900; color:var(--green)">$${parseInt(f.total || 0).toLocaleString()}</div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    container.innerHTML = html;
+}
+
+async function pagarFiado(fiadoId, cliente, total) {
+    showConfirm('Cobrar Deuda', `¿Confirmas que ${cliente} pagó la deuda de $${parseInt(total).toLocaleString()}?`, async () => {
+        toast(`Procesando pago de ${cliente}...`, 'info');
+        try {
+            await fetch(GAS_URL, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ action: "pagar_fiado", fiadoId: fiadoId }) });
+            toast(`✅ Deuda de ${cliente} marcada como PAGADA`, 'success');
+            await syncData();
+        } catch(e) {
+            toast('Error al registrar pago', 'error');
+        }
+    });
+}
+
+function sendWhatsAppFiado(cliente, total, detalle) {
+    const text = `Hola ${cliente}, te escribimos de La Tienda El Hueco para recordarte tu cuenta pendiente por un total de $${parseInt(total).toLocaleString()} (${detalle}). ¡Muchas gracias!`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
 }
 
 // ===================== RENDER GESTIÓN =====================
@@ -1693,13 +1969,20 @@ function renderGestion(items, container) {
                     <i class="bi bi-pencil-square"></i> Editar Nombre / Precio (PIN)
                 </button>
             </div>
-            <div class="stock-controls">
-                <button class="stock-btn minus" onclick="handleStock('${safeName}', ${stock}, -1)">−</button>
-                <div class="stock-center">
-                    <div class="lbl">Stock</div>
-                    <div class="num">${stock}</div>
+            <div class="stock-controls" style="flex-direction:column; align-items:center; gap:6px">
+                <div style="display:flex; align-items:center; gap:6px">
+                    <button class="stock-btn minus" onclick="handleStock('${safeName}', ${stock}, -1)">−</button>
+                    <div class="stock-center">
+                        <div class="lbl">Stock</div>
+                        <div class="num">${stock}</div>
+                    </div>
+                    <button class="stock-btn plus" onclick="handleStock('${safeName}', ${stock}, 1)">+</button>
                 </div>
-                <button class="stock-btn plus" onclick="handleStock('${safeName}', ${stock}, 1)">+</button>
+                <div style="display:flex; gap:4px">
+                    <button class="stock-step-btn" onclick="handleStock('${safeName}', ${stock}, -5)">-5</button>
+                    <button class="stock-step-btn" onclick="handleStock('${safeName}', ${stock}, 5)">+5</button>
+                    <button class="stock-step-btn" onclick="handleStock('${safeName}', ${stock}, 10)">+10</button>
+                </div>
             </div>
         </div>`;
     }).join('');

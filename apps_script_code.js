@@ -82,6 +82,22 @@ function doGet() {
     }));
   }
 
+  // Aseguramos que existe la hoja de Fiados (Cuentas por cobrar)
+  const fSheet = getOrCreateSheet("Fiados", ["ID FIADO", "FECHA", "CLIENTE", "PRODUCTOS / DETALLE", "TOTAL", "ESTADO"]);
+  const fData = fSheet.getDataRange().getDisplayValues();
+  let fiados = [];
+  if (fData.length > 1) {
+    fData.shift();
+    fiados = fData.map(row => ({
+      id: row[0],
+      fecha: row[1],
+      cliente: row[2],
+      detalle: row[3],
+      total: row[4],
+      estado: row[5] || "PENDIENTE"
+    }));
+  }
+
   // Reloj y Estado del Servidor
   const tz = Session.getScriptTimeZone();
   const serverHour = parseInt(Utilities.formatDate(new Date(), tz, "H"));
@@ -96,6 +112,7 @@ function doGet() {
     historial: historial.reverse(), // Para mostrar lo más reciente arriba
     cierres: cierres.reverse(),
     bitacora: bitacora.reverse(),
+    fiados: fiados.reverse(),
     clock: { hour: serverHour, today: todayStr, state: storeState, lastStateTime: lastStateTime }
   };
   
@@ -296,5 +313,72 @@ function doPost(e) {
     
     logAudit("CIERRE_CAJA", "Jornada CERRADA el " + fechaHora + ". Venta total: $" + totalVentasHoy + " en " + itemsVendidos + " items.");
     return ContentService.createTextOutput("Cierre OK").setMimeType(ContentService.MimeType.TEXT);
+  }
+
+  // 10. REGISTRAR FIADO (DEUDA DE CLIENTE)
+  if (p.action === "crear_fiado") {
+    const fSheet = getOrCreateSheet("Fiados", ["ID FIADO", "FECHA", "CLIENTE", "PRODUCTOS / DETALLE", "TOTAL", "ESTADO"]);
+    const fiadoId = "F-" + new Date().getTime().toString(36).toUpperCase();
+    const tz = Session.getScriptTimeZone();
+    const fecha = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
+    
+    // Restar stock si trae items
+    if (p.items && Array.isArray(p.items)) {
+      for (let j = 0; j < p.items.length; j++) {
+        let item = p.items[j];
+        for (let i = 1; i < data.length; i++) {
+          if (data[i][0] == item.producto) {
+             let actual = data[i][3] || 0;
+             sheet.getRange(i + 1, 4).setValue(actual - item.qty);
+             break;
+          }
+        }
+      }
+    }
+    
+    fSheet.appendRow([fiadoId, fecha, p.cliente, p.detalle, p.total, "PENDIENTE"]);
+    logAudit("FIADO_CREADO", "Fiado registrado a '" + p.cliente + "' por un total de $" + p.total + " (ID: " + fiadoId + ")");
+    return ContentService.createTextOutput("Fiado OK").setMimeType(ContentService.MimeType.TEXT);
+  }
+
+  // 11. PAGAR FIADO (COBRAR DEUDA)
+  if (p.action === "pagar_fiado") {
+    const fSheet = getOrCreateSheet("Fiados");
+    const fData = fSheet.getDataRange().getValues();
+    const tz = Session.getScriptTimeZone();
+    const fechaPago = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
+
+    for (let i = 1; i < fData.length; i++) {
+      if (fData[i][0] == p.fiadoId) {
+        fSheet.getRange(i + 1, 6).setValue("PAGADO");
+        
+        // Opcional: Registrar cobro de deuda en el Historial de Ventas
+        const hSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL"]);
+        hSheet.appendRow([
+          "PAGOF-" + p.fiadoId,
+          fechaPago,
+          "[PAGO DEUDA] " + fData[i][2],
+          1,
+          fData[i][4]
+        ]);
+
+        logAudit("FIADO_PAGADO", "Deuda de '" + fData[i][2] + "' de $" + fData[i][4] + " fue COBRADA Y PAGADA.");
+        return ContentService.createTextOutput("Fiado Pagado").setMimeType(ContentService.MimeType.TEXT);
+      }
+    }
+    return ContentService.createTextOutput("Fiado no encontrado").setMimeType(ContentService.MimeType.TEXT);
+  }
+
+  // 12. ELIMINAR FIADO
+  if (p.action === "eliminar_fiado") {
+    const fSheet = getOrCreateSheet("Fiados");
+    const fData = fSheet.getDataRange().getValues();
+    for (let i = 1; i < fData.length; i++) {
+      if (fData[i][0] == p.fiadoId) {
+        fSheet.deleteRow(i + 1);
+        logAudit("FIADO_ELIMINADO", "Fiado ID " + p.fiadoId + " fue eliminado.");
+        return ContentService.createTextOutput("Fiado Eliminado").setMimeType(ContentService.MimeType.TEXT);
+      }
+    }
   }
 }
