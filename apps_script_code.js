@@ -2,21 +2,22 @@ const SHEET_NAME = "Añadiendo Precios y Calculando Ganancias";
 
 // UTILIDAD ROBUSTA PARA ASEGURAR QUE LAS PESTAÑAS EXISTEN SIN DUPLICARLAS
 function getOrCreateSheet(sheetName, headers = []) {
+  if (!sheetName) sheetName = SHEET_NAME;
   let ss = SpreadsheetApp.getActiveSpreadsheet();
-  let targetClean = sheetName.trim().toLowerCase();
+  let targetClean = sheetName.toString().trim().toLowerCase();
   let sheets = ss.getSheets();
   let sheet = null;
 
   for (let s of sheets) {
-    if (s.getName().trim().toLowerCase() === targetClean) {
+    if (s.getName().toString().trim().toLowerCase() === targetClean) {
       sheet = s;
       break;
     }
   }
 
   if (!sheet) {
-    sheet = ss.insertSheet(sheetName.trim());
-    if (headers.length > 0) {
+    sheet = ss.insertSheet(sheetName.toString().trim());
+    if (headers && headers.length > 0) {
       sheet.appendRow(headers);
       sheet.getRange(1, 1, 1, headers.length).setFontWeight("bold");
     }
