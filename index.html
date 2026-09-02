@@ -64,6 +64,9 @@
         header.mode-historial {
             background: linear-gradient(135deg, #311b92, #673ab7);
         }
+        header.mode-reportes {
+            background: linear-gradient(135deg, #0f766e, #0d9488);
+        }
 
         .header-top {
             max-width: 480px;
@@ -156,6 +159,11 @@
             background: #8b5cf6;
             color: #fff;
             box-shadow: 0 4px 12px rgba(139,92,246,0.3);
+        }
+        .tab-btn.active#tab-reportes {
+            background: #0d9488;
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(13,148,136,0.3);
         }
 
         /* Fast Sell & Custom Picker Styles */
@@ -960,6 +968,7 @@
             <button onclick="setMode('fiados')" id="tab-fiados" class="tab-btn">Fiados 📋</button>
             <button onclick="setMode('gestion')" id="tab-gestion" class="tab-btn">Stock 📦</button>
             <button onclick="setMode('historial')" id="tab-historial" class="tab-btn">Cierres 📜</button>
+            <button onclick="setMode('reportes')" id="tab-reportes" class="tab-btn">Reportes 📊</button>
         </div>
         <div style="height:16px"></div>
     </header>
@@ -1414,16 +1423,17 @@ function setMode(mode) {
     const header = document.getElementById('main-header');
     header.className = 'mode-' + mode;
 
-    ['venta', 'fiados', 'gestion', 'historial'].forEach(m => {
+    ['venta', 'fiados', 'gestion', 'historial', 'reportes'].forEach(m => {
         document.getElementById('tab-' + m)?.classList.toggle('active', m === mode);
     });
-    document.getElementById('search-container').style.display = (mode === 'historial' || mode === 'fiados') ? 'none' : '';
+    document.getElementById('search-container').style.display = (mode === 'historial' || mode === 'fiados' || mode === 'reportes') ? 'none' : '';
     
     document.getElementById('mode-text').textContent =
         mode === 'venta' ? 'Punto de Venta 🛒' :
         mode === 'fiados' ? 'Fiados & Cuentas 📋' :
         mode === 'gestion' ? 'Control de Stock 📦' :
-        'Auditoría & Cierres 📊';
+        mode === 'reportes' ? 'Analítica & Reportes 📊' :
+        'Auditoría & Turnos 📜';
 
     document.getElementById('fab-group').classList.toggle('visible', mode === 'gestion');
     renderCurrentMode();
@@ -1523,6 +1533,9 @@ function renderCurrentMode() {
     } else if (currentMode === 'gestion') {
         document.getElementById('dashboard').innerHTML = '';
         renderGestion(filtered, grid);
+    } else if (currentMode === 'reportes') {
+        document.getElementById('dashboard').innerHTML = '';
+        renderReportes(grid);
     } else {
         document.getElementById('dashboard').innerHTML = '';
         renderHistorial(grid);
@@ -2094,23 +2107,177 @@ function renderGestion(items, container) {
     }).join('');
 }
 
-function toggleLowStockFilter() {
-    showLowStockOnly = !showLowStockOnly;
-    renderCurrentMode();
+// ===================== RENDER REPORTES & INTELIGENCIA DE TIENDA =====================
+function renderReportes(container) {
+    const today = new Date();
+    const opcionesFecha = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+    const fechaLargaStr = today.toLocaleDateString('es-CO', opcionesFecha);
+    const fechaFormateada = fechaLargaStr.charAt(0).toUpperCase() + fechaLargaStr.slice(1);
+
+    let totalVentaHistorial = 0;
+    let cantTickets = new Set();
+    const salesMap = {};
+    const moneyMap = {};
+
+    historial.forEach(h => {
+        const sub = parseInt(h.subtotal || 0);
+        const cant = parseInt(h.cantidad || 1);
+        const prod = h.producto || 'Desconocido';
+
+        totalVentaHistorial += sub;
+        cantTickets.add(h.id);
+        salesMap[prod] = (salesMap[prod] || 0) + cant;
+        moneyMap[prod] = (moneyMap[prod] || 0) + sub;
+    });
+
+    const ticketAvg = cantTickets.size > 0 ? Math.round(totalVentaHistorial / cantTickets.size) : 0;
+    const restockItems = inventory.filter(p => parseInt(p.Stock || 0) <= 5);
+    const sortedProdsByQty = Object.keys(salesMap).sort((a, b) => salesMap[b] - salesMap[a]);
+    const maxQty = sortedProdsByQty.length ? salesMap[sortedProdsByQty[0]] : 1;
+
+    let html = `
+        <!-- Big Date Banner -->
+        <div style="background:linear-gradient(135deg, #0f766e, #047857); border-radius:var(--radius); padding:20px 16px; margin-bottom:16px; box-shadow:0 8px 24px rgba(13,148,136,0.3)">
+            <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1.5px; color:rgba(255,255,255,0.8)">Reporte General & Analítica</div>
+            <div style="font-size:18px; font-weight:900; color:#fff; margin-top:4px; font-style:italic">📅 ${fechaFormateada}</div>
+            <div style="display:flex; align-items:center; gap:8px; margin-top:10px">
+                <span style="background:rgba(0,0,0,0.3); color:#fff; padding:4px 10px; border-radius:8px; font-size:11px; font-weight:800">
+                    ${isStoreOpen ? '🟢 Turno Abierto' : '🔴 Caja en Standby'}
+                </span>
+                <span style="font-size:11px; color:rgba(255,255,255,0.9); font-weight:700">
+                    ${lastStateTime ? 'Desde: ' + lastStateTime : ''}
+                </span>
+            </div>
+        </div>
+
+        <!-- KPI Cards Grid -->
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:20px">
+            <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:16px; padding:14px">
+                <div style="font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase">Venta Acumulada</div>
+                <div style="font-size:22px; font-weight:900; color:var(--green); margin-top:4px">$${totalVentaHistorial.toLocaleString()}</div>
+            </div>
+            <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:16px; padding:14px">
+                <div style="font-size:11px; font-weight:800; color:var(--text-muted); text-transform:uppercase">Ticket Promedio</div>
+                <div style="font-size:22px; font-weight:900; color:var(--accent); margin-top:4px">$${ticketAvg.toLocaleString()}</div>
+            </div>
+        </div>
+
+        <!-- Top Sold Items Section -->
+        <div style="margin-bottom:24px">
+            <div style="font-size:13px; font-weight:900; text-transform:uppercase; letter-spacing:1px; color:#fff; margin-bottom:12px; display:flex; align-items:center; gap:6px">
+                <i class="bi bi-trophy-fill" style="color:var(--yellow)"></i> 🏆 Productos Más Vendidos
+            </div>
+            ${!sortedProdsByQty.length ? '<div class="empty-state">Aún no hay ventas registradas</div>' : `
+                <div style="display:flex; flex-direction:column; gap:10px">
+                    ${sortedProdsByQty.slice(0, 5).map((p, idx) => {
+                        const qty = salesMap[p];
+                        const money = moneyMap[p];
+                        const pct = Math.round((qty / maxQty) * 100);
+                        const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+                        return `
+                            <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:12px 14px">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px">
+                                    <div style="font-size:14px; font-weight:800; color:var(--text-primary)">
+                                        ${medals[idx] || '🔹'} ${p}
+                                    </div>
+                                    <div style="font-size:13px; font-weight:900; color:var(--green)">
+                                        $${money.toLocaleString()}
+                                    </div>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:10px">
+                                    <div style="flex:1; background:rgba(255,255,255,0.06); height:8px; border-radius:4px; overflow:hidden">
+                                        <div style="width:${pct}%; background:linear-gradient(90deg, #10b981, #059669); height:100%"></div>
+                                    </div>
+                                    <span style="font-size:11px; font-weight:800; color:var(--text-secondary)">${qty} unids</span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `}
+        </div>
+
+        <!-- Vendor Restock List Section -->
+        <div style="margin-bottom:24px">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px">
+                <div style="font-size:13px; font-weight:900; text-transform:uppercase; letter-spacing:1px; color:#f59e0b; display:flex; align-items:center; gap:6px">
+                    <i class="bi bi-cart-check-fill" style="color:#f59e0b"></i> 📋 Lista de Pedido (Reposición)
+                </div>
+                ${restockItems.length ? `
+                    <button onclick="shareRestockWhatsApp()" style="background:#25d366; color:#fff; border:none; padding:6px 12px; border-radius:8px; font-size:11px; font-weight:800; cursor:pointer; display:flex; align-items:center; gap:4px">
+                        <i class="bi bi-whatsapp"></i> Copiar Pedido
+                    </button>
+                ` : ''}
+            </div>
+
+            ${!restockItems.length ? `
+                <div style="background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.2); border-radius:14px; padding:14px; text-align:center; color:var(--green); font-size:13px; font-weight:800">
+                    <i class="bi bi-check-circle-fill"></i> Stock saludable. No hay productos críticos a reponer.
+                </div>
+            ` : `
+                <div style="display:flex; flex-direction:column; gap:8px">
+                    ${restockItems.map(item => {
+                        const stock = parseInt(item.Stock || 0);
+                        const sugerido = Math.max(10, 15 - stock);
+                        return `
+                            <div style="background:var(--bg-card); border:1px solid rgba(245,158,11,0.3); border-radius:14px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center">
+                                <div>
+                                    <div style="font-size:14px; font-weight:800; color:#fff">${item.Producto}</div>
+                                    <div style="font-size:11px; color:var(--red); font-weight:700; margin-top:2px">Stock actual: ${stock} unids</div>
+                                </div>
+                                <div style="text-align:right">
+                                    <span style="background:rgba(245,158,11,0.2); color:#f59e0b; padding:4px 8px; border-radius:8px; font-size:11px; font-weight:900">
+                                        Pedir: +${sugerido} unids
+                                    </span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `}
+        </div>
+    `;
+
+    container.innerHTML = html;
 }
 
-// ===================== RENDER HISTORIAL & CIERRES =====================
+function shareRestockWhatsApp() {
+    const restockItems = inventory.filter(p => parseInt(p.Stock || 0) <= 5);
+    if (!restockItems.length) return;
+
+    let lines = restockItems.map(i => {
+        const stock = parseInt(i.Stock || 0);
+        const sugerido = Math.max(10, 15 - stock);
+        return `• ${i.Producto}: Pedir ${sugerido} unids (Stock actual: ${stock})`;
+    });
+
+    const text = `📋 *PEDIDO DE REPOSICIÓN PROVEEDOR*\n*La Tienda El Hueco*\nFecha: ${new Date().toLocaleDateString('es-CO')}\n${'─'.repeat(24)}\n${lines.join('\n')}\n${'─'.repeat(24)}\nFavor confirmar pedido. ¡Gracias!`;
+
+    if (navigator.share) {
+        navigator.share({ title: 'Pedido de Reposición', text: text }).catch(() => {});
+    } else {
+        navigator.clipboard.writeText(text).then(() => toast('📋 Lista de pedido copiada al portapapeles', 'success'));
+    }
+}
+
+function toggleShiftTickets(shiftId) {
+    const el = document.getElementById('shift-tickets-' + shiftId);
+    if (!el) return;
+    el.style.display = (el.style.display === 'none' || !el.style.display) ? 'block' : 'none';
+}
+
+// ===================== RENDER HISTORIAL & CIERRES (TURNOS COMO PAQUETES) =====================
 function renderHistorial(container) {
     const statusBg = isStoreOpen ? '#064e3b' : '#7f1d1d';
     const statusBorder = isStoreOpen ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)';
-    const statusText = isStoreOpen ? 'JORNADA ABIERTA 🟢' : 'JORNADA CERRADA 🔴';
-    const statusTime = lastStateTime ? `Registrado: ${lastStateTime}` : '';
+    const statusText = isStoreOpen ? 'TURNO ABIERTO EN CURSO 🟢' : 'CAJA CERRADA 🔴';
+    const statusTime = lastStateTime ? `Desde: ${lastStateTime}` : '';
 
     let headerHTML = `
-        <div style="background:${statusBg}; border:1px solid ${statusBorder}; border-radius:var(--radius); padding:16px; margin-bottom:16px; display:flex; justify-between; align-items:center; box-shadow:0 4px 16px rgba(0,0,0,0.2)">
+        <div style="background:${statusBg}; border:1px solid ${statusBorder}; border-radius:var(--radius); padding:16px; margin-bottom:16px; display:flex; justify-content:space-between; align-items:center; box-shadow:0 4px 16px rgba(0,0,0,0.2)">
             <div>
-                <div style="font-size:12px; font-weight:900; color:#fff; letter-spacing:0.5px">${statusText}</div>
-                <div style="font-size:10px; color:rgba(255,255,255,0.7); font-weight:700; margin-top:2px">${statusTime}</div>
+                <div style="font-size:13px; font-weight:900; color:#fff; letter-spacing:0.5px">${statusText}</div>
+                <div style="font-size:11px; color:rgba(255,255,255,0.8); font-weight:700; margin-top:2px">${statusTime}</div>
             </div>
             ${isStoreOpen ? `
                 <button class="close-day-btn" onclick="closeDay()" style="background:#ef4444; color:#fff; box-shadow:0 4px 12px rgba(239,68,68,0.3)">
@@ -2124,33 +2291,70 @@ function renderHistorial(container) {
         </div>
     `;
 
-    // Cierres report section
-    let cierresHTML = '';
+    // Turnos como Paquetes (Fechas Grandes)
+    let turnosHTML = '';
     if (cierres && cierres.length) {
-        cierresHTML = `
-            <div style="margin-bottom:20px">
-                <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:10px; display:flex; align-items:center; gap:6px">
-                    <i class="bi bi-journal-text" style="color:var(--accent)"></i> Historial de Cierres de Día (Z-Out)
+        turnosHTML = `
+            <div style="margin-bottom:24px">
+                <div style="font-size:12px; font-weight:900; text-transform:uppercase; letter-spacing:1px; color:var(--accent); margin-bottom:12px; display:flex; align-items:center; gap:6px">
+                    <i class="bi bi-box-seam-fill" style="color:var(--accent)"></i> Paquetes de Turnos (Apertura ➔ Cierre)
                 </div>
-                <div style="display:flex; flex-direction:column; gap:8px">
-                    ${cierres.slice(0, 10).map(c => `
-                        <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:14px; padding:12px 14px; display:flex; justify-content:space-between; align-items:center">
-                            <div>
-                                <div style="font-size:12px; font-weight:800; color:var(--text-primary)">${c.descripcion || 'Cierre de Caja'}</div>
-                                <div style="font-size:10px; color:var(--text-muted); font-weight:700; margin-top:2px"><i class="bi bi-clock"></i> ${c.fecha}</div>
+                <div style="display:flex; flex-direction:column; gap:12px">
+                    ${cierres.slice(0, 10).map((c, idx) => {
+                        const shiftId = c.idTurno || 'TRN-' + idx;
+                        const isTurnoAbierto = (c.estado === 'ABIERTO');
+                        const totalVal = (c.total && c.total !== '-') ? '$' + parseFloat(c.total).toLocaleString() : '-';
+                        
+                        const ticketsInShift = historial.filter(h => h.idTurno === shiftId);
+
+                        return `
+                            <div style="background:var(--bg-card); border:1px solid ${isTurnoAbierto ? 'rgba(34,197,94,0.4)' : 'var(--border)'}; border-radius:16px; padding:16px">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px">
+                                    <div>
+                                        <span style="background:${isTurnoAbierto ? 'rgba(34,197,94,0.2)' : 'rgba(255,255,255,0.06)'}; color:${isTurnoAbierto ? 'var(--green)' : 'var(--text-secondary)'}; font-size:10px; font-weight:900; padding:3px 8px; border-radius:6px; text-transform:uppercase">
+                                            ${isTurnoAbierto ? '🟢 Turno En Curso' : '🔒 Turno Concluido'}
+                                        </span>
+                                        <!-- FECHAS GRANDES Y DESTACADAS -->
+                                        <div style="font-size:15px; font-weight:900; color:#fff; margin-top:6px; line-height:1.3">
+                                            📅 Apertura: ${c.fechaApertura || c.fecha}
+                                        </div>
+                                        ${c.fechaCierre && c.fechaCierre !== '-' ? `
+                                            <div style="font-size:13px; font-weight:800; color:var(--text-secondary); margin-top:2px">
+                                                🔒 Cierre: ${c.fechaCierre}
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                    <div style="text-align:right">
+                                        <div style="font-size:20px; font-weight:900; color:${isTurnoAbierto ? 'var(--green)' : '#fff'}">${totalVal}</div>
+                                        <div style="font-size:11px; color:var(--text-muted); font-weight:700">${c.items && c.items !== '-' ? c.items + ' unids' : ''}</div>
+                                    </div>
+                                </div>
+
+                                <!-- Collapsible tickets for this shift package -->
+                                ${ticketsInShift.length ? `
+                                    <button onclick="toggleShiftTickets('${shiftId}')" style="width:100%; background:rgba(255,255,255,0.04); border:1px solid var(--border); color:var(--text-secondary); padding:8px; border-radius:10px; font-size:11px; font-weight:800; cursor:pointer; margin-top:8px; display:flex; justify-content:space-between; align-items:center">
+                                        <span>🔍 Ver ${ticketsInShift.length} tickets de este turno</span>
+                                        <i class="bi bi-chevron-down"></i>
+                                    </button>
+                                    <div id="shift-tickets-${shiftId}" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border)">
+                                        <div style="font-size:11px; font-weight:800; color:var(--text-muted); margin-bottom:6px">Desglose de Tickets:</div>
+                                        ${ticketsInShift.map(t => `
+                                            <div style="display:flex; justify-content:space-between; font-size:11px; padding:4px 0; color:var(--text-secondary); border-bottom:1px dashed var(--border)">
+                                                <span>${t.cantidad}x ${t.producto}</span>
+                                                <span style="font-weight:800; color:var(--green)">$${parseInt(t.subtotal || 0).toLocaleString()}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                ` : ''}
                             </div>
-                            <div style="text-align:right">
-                                <div style="font-size:14px; font-weight:900; color:${c.total && c.total !== '-' ? 'var(--green)' : 'var(--text-muted)'}">${c.total && c.total !== '-' ? '$' + parseFloat(c.total).toLocaleString() : '-'}</div>
-                                <div style="font-size:10px; color:var(--text-secondary); font-weight:600">${c.items && c.items !== '-' ? c.items + ' items' : ''}</div>
-                            </div>
-                        </div>
-                    `).join('')}
+                        `;
+                    }).join('')}
                 </div>
             </div>
         `;
     }
 
-    // Bitácora Inalterable Section (Audit Log permanente)
+    // Bitácora Inalterable Section
     let bitacoraHTML = '';
     if (bitacora && bitacora.length) {
         bitacoraHTML = `
@@ -2158,8 +2362,8 @@ function renderHistorial(container) {
                 <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:#ef4444; margin-bottom:10px; display:flex; align-items:center; gap:6px">
                     <i class="bi bi-shield-lock-fill" style="color:#ef4444"></i> Bitácora Inalterable de Auditoría (Permanente)
                 </div>
-                <div style="display:flex; flex-direction:column; gap:8px; max-height:240px; overflow-y:auto; padding-right:4px">
-                    ${bitacora.slice(0, 15).map(b => `
+                <div style="display:flex; flex-direction:column; gap:8px; max-height:200px; overflow-y:auto; padding-right:4px">
+                    ${bitacora.slice(0, 10).map(b => `
                         <div style="background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.18); border-radius:12px; padding:10px 12px">
                             <div style="display:flex; justify-content:space-between; align-items:center">
                                 <span style="font-size:10px; font-weight:900; color:#ef4444; text-transform:uppercase; background:rgba(239,68,68,0.12); padding:2px 6px; border-radius:4px">${b.accion || 'AUDIT'}</span>
@@ -2173,48 +2377,7 @@ function renderHistorial(container) {
         `;
     }
 
-    let salesTitleHTML = `
-        <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:1px; color:var(--text-muted); margin-bottom:10px; display:flex; align-items:center; gap:6px">
-            <i class="bi bi-receipt" style="color:var(--green)"></i> Ventas Registradas (Tickets)
-        </div>
-    `;
-
-    if (!historial.length) {
-        container.innerHTML = headerHTML + cierresHTML + bitacoraHTML + salesTitleHTML + '<div class="empty-state">No hay ventas registradas en esta jornada</div>';
-        return;
-    }
-
-    let groups = {};
-    historial.forEach(h => {
-        if (!groups[h.id]) groups[h.id] = { fecha: h.fecha, total: 0, items: [] };
-        groups[h.id].items.push(h);
-        groups[h.id].total += parseInt(h.subtotal || 0);
-    });
-
-    let salesListHTML = Object.keys(groups).map(id => {
-        let sale = groups[id];
-        return `
-        <div class="sale-card">
-            <div class="sale-top">
-                <div>
-                    <span class="sale-id">${id}</span>
-                    <div class="sale-date">${sale.fecha}</div>
-                </div>
-                <span class="sale-total">$${sale.total.toLocaleString()}</span>
-            </div>
-            <div class="sale-items">
-                ${sale.items.map(it => `
-                    <div class="sale-item">
-                        <span class="s-name">${it.cantidad}x ${it.producto}</span>
-                        <span class="s-sub">$${parseInt(it.subtotal).toLocaleString()}</span>
-                    </div>
-                `).join('')}
-            </div>
-            <button class="revert-btn" onclick="handleRevert('${id}')">Revertir e Invalidar Venta</button>
-        </div>`;
-    }).join('');
-
-    container.innerHTML = headerHTML + cierresHTML + bitacoraHTML + salesTitleHTML + salesListHTML;
+    container.innerHTML = headerHTML + turnosHTML + bitacoraHTML;
 }
 
 // ===================== PROTECTED ACTIONS =====================

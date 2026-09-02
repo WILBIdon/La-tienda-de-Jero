@@ -37,39 +37,42 @@ function doGet() {
     return obj;
   });
 
-  // Aseguramos que existe el Historial para leerlo (lo crea vacío si no)
-  const hSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL"]);
+  // 1. Historial de Ventas (Tickets)
+  const hSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL", "ID TURNO"]);
   const hData = hSheet.getDataRange().getDisplayValues();
   let historial = [];
   
-  if(hData.length > 1) { // Hay datos además del encabezado
-     hData.shift(); // Quitar encabezado
+  if(hData.length > 1) {
+     hData.shift();
      historial = hData.map(row => {
        return {
          id: row[0],
          fecha: row[1],
          producto: row[2],
          cantidad: row[3],
-         subtotal: row[4]
+         subtotal: row[4],
+         idTurno: row[5] || ""
        };
      });
   }
 
-  // Aseguramos que existe la hoja de Cierres Diarios
-  const cSheet = getOrCreateSheet("Cierres Diarios", ["FECHA", "DESCRIPCIÓN", "ITEMS VENDIDOS", "TOTAL DINERO"]);
+  // 2. Cierres Diarios y Paquetes de Turnos
+  const cSheet = getOrCreateSheet("Cierres Diarios", ["ID TURNO", "FECHA APERTURA", "FECHA CIERRE", "ESTADO", "ITEMS VENDIDOS", "TOTAL DINERO"]);
   const cData = cSheet.getDataRange().getDisplayValues();
-  let cierres = [];
+  let turnos = [];
   if (cData.length > 1) {
     cData.shift();
-    cierres = cData.map(row => ({
-      fecha: row[0],
-      descripcion: row[1],
-      items: row[2],
-      total: row[3]
+    turnos = cData.map(row => ({
+      idTurno: row[0],
+      fechaApertura: row[1],
+      fechaCierre: row[2],
+      estado: row[3] || "CERRADO",
+      items: row[4],
+      total: row[5]
     }));
   }
 
-  // Aseguramos que existe la Bitácora Inalterable de Auditoría
+  // 3. Bitácora Inalterable de Auditoría
   const bSheet = getOrCreateSheet("Bitacora Inalterable", ["FECHA Y HORA", "ACCION", "DETALLE"]);
   const bData = bSheet.getDataRange().getDisplayValues();
   let bitacora = [];
@@ -82,7 +85,7 @@ function doGet() {
     }));
   }
 
-  // Aseguramos que existe la hoja de Fiados (Cuentas por cobrar)
+  // 4. Fiados (Cuentas por cobrar)
   const fSheet = getOrCreateSheet("Fiados", ["ID FIADO", "FECHA", "CLIENTE", "PRODUCTOS / DETALLE", "TOTAL", "ESTADO"]);
   const fData = fSheet.getDataRange().getDisplayValues();
   let fiados = [];
@@ -103,17 +106,25 @@ function doGet() {
   const serverHour = parseInt(Utilities.formatDate(new Date(), tz, "H"));
   const todayStr = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy");
   
-  // Estado manual de la tienda
+  // Estado manual del turno
   const storeState = PropertiesService.getScriptProperties().getProperty("storeState") || "CLOSED";
+  const activeShiftId = PropertiesService.getScriptProperties().getProperty("activeShiftId") || "";
   const lastStateTime = PropertiesService.getScriptProperties().getProperty("lastStateTime") || "";
 
   const result = {
     inventario: inventario,
-    historial: historial.reverse(), // Para mostrar lo más reciente arriba
-    cierres: cierres.reverse(),
+    historial: historial.reverse(),
+    cierres: turnos.reverse(),
+    turnos: turnos,
     bitacora: bitacora.reverse(),
     fiados: fiados.reverse(),
-    clock: { hour: serverHour, today: todayStr, state: storeState, lastStateTime: lastStateTime }
+    clock: { 
+      hour: serverHour, 
+      today: todayStr, 
+      state: storeState, 
+      activeShiftId: activeShiftId, 
+      lastStateTime: lastStateTime 
+    }
   };
   
   return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
@@ -131,7 +142,7 @@ function doPost(e) {
     return ContentService.createTextOutput("Creado").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 2. CREAR MASIVO — Sube múltiples productos de golpe
+  // 2. CREAR MASIVO
   if (p.action === "crear_masivo") {
     if (p.items && Array.isArray(p.items)) {
       for (let i = 0; i < p.items.length; i++) {
@@ -172,7 +183,7 @@ function doPost(e) {
     }
   }
 
-  // 5. EDITAR PRODUCTO / PRECIOS (PROTEGIDO)
+  // 5. EDITAR PRODUCTO / PRECIOS
   if (p.action === "editar_precio" || p.action === "editar_producto") {
     for (let i = 1; i < data.length; i++) {
       if (data[i][0] == p.producto) {
@@ -192,21 +203,19 @@ function doPost(e) {
     return ContentService.createTextOutput("No encontrado").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 6. CHECKOUT (Carrito de Ventas masivo)
+  // 6. CHECKOUT (Venta en Turno Activo)
   if (p.action === "checkout") {
-    let historialSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL"]);
+    let historialSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL", "ID TURNO"]);
     const ventaId = new Date().getTime().toString(36).toUpperCase(); 
-    
+    const activeShiftId = PropertiesService.getScriptProperties().getProperty("activeShiftId") || "TURNO-LIBRE";
     const tz = Session.getScriptTimeZone();
     const fecha = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
     let totalVenta = 0;
     
-    // p.items = [{producto, qty, precio, subtotal}, ...]
     for (let j = 0; j < p.items.length; j++) {
       let item = p.items[j];
       totalVenta += parseFloat(item.subtotal || 0);
       
-      // Restar stock principal
       for (let i = 1; i < data.length; i++) {
         if (data[i][0] == item.producto) {
            let actual = data[i][3] || 0;
@@ -214,11 +223,9 @@ function doPost(e) {
            break;
         }
       }
-      
-      // Grabar en Historial
-      historialSheet.appendRow([ventaId, fecha, item.producto, item.qty, item.subtotal]);
+      historialSheet.appendRow([ventaId, fecha, item.producto, item.qty, item.subtotal, activeShiftId]);
     }
-    logAudit("VENTA_REGISTRADA", "Ticket " + ventaId + " procesado por un total de $" + totalVenta + " (" + p.items.length + " items)");
+    logAudit("VENTA_REGISTRADA", "Ticket " + ventaId + " (Turno: " + activeShiftId + ") procesado por $" + totalVenta + " (" + p.items.length + " items)");
     return ContentService.createTextOutput("Checkout OK").setMimeType(ContentService.MimeType.TEXT);
   }
 
@@ -229,7 +236,6 @@ function doPost(e) {
     let rowsToDelete = [];
     let productosDevueltos = [];
     
-    // Escanear el historial desde el final para no descuadrar los índices
     for (let i = hData.length - 1; i >= 1; i--) {
        if (hData[i][0] == p.ventaId) {
           let prod = hData[i][2];
@@ -237,7 +243,6 @@ function doPost(e) {
           let sub = hData[i][4];
           productosDevueltos.push(cant + "x " + prod + " ($" + sub + ")");
           
-          // Devolver el stock
           for (let rowInv = 1; rowInv < data.length; rowInv++) {
              if (data[rowInv][0] == prod) {
                 let actual = data[rowInv][3] || 0;
@@ -245,7 +250,7 @@ function doPost(e) {
                 break;
              }
           }
-          rowsToDelete.push(i + 1); // 1-based index
+          rowsToDelete.push(i + 1);
        }
     }
     
@@ -256,73 +261,84 @@ function doPost(e) {
     return ContentService.createTextOutput("Revertido").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 8. APERTURA DE CAJA
+  // 8. APERTURA DE CAJA (CREACIÓN DE PAQUETE DE TURNO)
   if (p.action === "abrir_caja") {
     const tz = Session.getScriptTimeZone();
     const fechaHora = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
+    const dateCode = Utilities.formatDate(new Date(), tz, "yyyyMMdd-HHmm");
+    const newShiftId = "TRN-" + dateCode;
     
     PropertiesService.getScriptProperties().setProperty("storeState", "OPEN");
+    PropertiesService.getScriptProperties().setProperty("activeShiftId", newShiftId);
     PropertiesService.getScriptProperties().setProperty("lastStateTime", fechaHora);
     
-    let cierresSheet = getOrCreateSheet("Cierres Diarios", ["FECHA", "DESCRIPCIÓN", "ITEMS VENDIDOS", "TOTAL DINERO"]);
+    let cierresSheet = getOrCreateSheet("Cierres Diarios", ["ID TURNO", "FECHA APERTURA", "FECHA CIERRE", "ESTADO", "ITEMS VENDIDOS", "TOTAL DINERO"]);
+    cierresSheet.appendRow([newShiftId, fechaHora, "-", "ABIERTO", 0, 0]);
     
-    cierresSheet.appendRow([
-       fechaHora,
-       "Apertura de Caja (Inicio de Turno)",
-       "-",
-       "-"
-    ]);
-    
-    logAudit("APERTURA_CAJA", "Jornada de ventas ABIERTA el " + fechaHora);
+    logAudit("APERTURA_CAJA", "Jornada/Turno " + newShiftId + " ABIERTO el " + fechaHora);
     return ContentService.createTextOutput("Apertura Abierta").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 9. CIERRE DE CAJA
+  // 9. CIERRE DE CAJA (FINALIZACIÓN DE PAQUETE DE TURNO)
   if (p.action === "cierre_caja") {
     const tz = Session.getScriptTimeZone();
     const fechaHora = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
+    const activeShiftId = PropertiesService.getScriptProperties().getProperty("activeShiftId") || "";
     
-    PropertiesService.getScriptProperties().setProperty("storeState", "CLOSED");
-    PropertiesService.getScriptProperties().setProperty("lastStateTime", fechaHora);
-    
-    let historialSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL"]);
-    let cierresSheet = getOrCreateSheet("Cierres Diarios", ["FECHA", "DESCRIPCIÓN", "ITEMS VENDIDOS", "TOTAL DINERO"]);
+    let historialSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL", "ID TURNO"]);
+    let cierresSheet = getOrCreateSheet("Cierres Diarios", ["ID TURNO", "FECHA APERTURA", "FECHA CIERRE", "ESTADO", "ITEMS VENDIDOS", "TOTAL DINERO"]);
     
     const hData = historialSheet.getDataRange().getValues();
-    const todayStr = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy");
+    const cData = cierresSheet.getDataRange().getValues();
     
-    let totalVentasHoy = 0;
-    let cantTickets = 0;
-    let itemsVendidos = 0;
+    let totalVentasTurno = 0;
+    let itemsVendidosTurno = 0;
+    let cantTicketsTurno = 0;
     
+    // Sumar las ventas asociadas a este turno específico
     for(let i = 1; i < hData.length; i++) {
-        let fechaFila = hData[i][1].toString();
-        if (fechaFila.includes(todayStr) || fechaFila.includes(todayStr.substring(0, 10))) {
-            cantTickets++;
-            itemsVendidos += parseInt(hData[i][3] || 0);
-            totalVentasHoy += parseFloat(hData[i][4] || 0);
+        let turnoFila = hData[i][5] ? hData[i][5].toString() : "";
+        if (turnoFila === activeShiftId || (!activeShiftId && hData[i][1].toString().includes(Utilities.formatDate(new Date(), tz, "dd/MM/yyyy")))) {
+            cantTicketsTurno++;
+            itemsVendidosTurno += parseInt(hData[i][3] || 0);
+            totalVentasTurno += parseFloat(hData[i][4] || 0);
         }
     }
     
-    cierresSheet.appendRow([
-       fechaHora,
-       "Cierre Z-Out Final de Día",
-       itemsVendidos,
-       totalVentasHoy
-    ]);
+    // Buscar la fila del turno abierto en Cierres Diarios y actualizarla
+    let turnoEncontrado = false;
+    for (let c = cData.length - 1; c >= 1; c--) {
+        if (cData[c][0] === activeShiftId || cData[c][3] === "ABIERTO") {
+            cierresSheet.getRange(c + 1, 3).setValue(fechaHora); // FECHA CIERRE
+            cierresSheet.getRange(c + 1, 4).setValue("CERRADO"); // ESTADO
+            cierresSheet.getRange(c + 1, 5).setValue(itemsVendidosTurno);
+            cierresSheet.getRange(c + 1, 6).setValue(totalVentasTurno);
+            turnoEncontrado = true;
+            break;
+        }
+    }
     
-    logAudit("CIERRE_CAJA", "Jornada CERRADA el " + fechaHora + ". Venta total: $" + totalVentasHoy + " en " + itemsVendidos + " items.");
+    // Si no existía la fila previa, se registra completa
+    if (!turnoEncontrado) {
+        cierresSheet.appendRow([activeShiftId || "TRN-MANUAL", fechaHora, fechaHora, "CERRADO", itemsVendidosTurno, totalVentasTurno]);
+    }
+    
+    PropertiesService.getScriptProperties().setProperty("storeState", "CLOSED");
+    PropertiesService.getScriptProperties().setProperty("activeShiftId", "");
+    PropertiesService.getScriptProperties().setProperty("lastStateTime", fechaHora);
+    
+    logAudit("CIERRE_CAJA", "Turno " + activeShiftId + " CERRADO el " + fechaHora + ". Venta: $" + totalVentasTurno + " (" + itemsVendidosTurno + " items en " + cantTicketsTurno + " tickets).");
     return ContentService.createTextOutput("Cierre OK").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 10. REGISTRAR FIADO (DEUDA DE CLIENTE)
+  // 10. REGISTRAR FIADO
   if (p.action === "crear_fiado") {
     const fSheet = getOrCreateSheet("Fiados", ["ID FIADO", "FECHA", "CLIENTE", "PRODUCTOS / DETALLE", "TOTAL", "ESTADO"]);
     const fiadoId = "F-" + new Date().getTime().toString(36).toUpperCase();
+    const activeShiftId = PropertiesService.getScriptProperties().getProperty("activeShiftId") || "TURNO-LIBRE";
     const tz = Session.getScriptTimeZone();
     const fecha = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
     
-    // Restar stock si trae items
     if (p.items && Array.isArray(p.items)) {
       for (let j = 0; j < p.items.length; j++) {
         let item = p.items[j];
@@ -337,14 +353,15 @@ function doPost(e) {
     }
     
     fSheet.appendRow([fiadoId, fecha, p.cliente, p.detalle, p.total, "PENDIENTE"]);
-    logAudit("FIADO_CREADO", "Fiado registrado a '" + p.cliente + "' por un total de $" + p.total + " (ID: " + fiadoId + ")");
+    logAudit("FIADO_CREADO", "Fiado registrado a '" + p.cliente + "' por un total de $" + p.total + " (ID: " + fiadoId + ", Turno: " + activeShiftId + ")");
     return ContentService.createTextOutput("Fiado OK").setMimeType(ContentService.MimeType.TEXT);
   }
 
-  // 11. PAGAR FIADO (COBRAR DEUDA)
+  // 11. PAGAR FIADO
   if (p.action === "pagar_fiado") {
     const fSheet = getOrCreateSheet("Fiados");
     const fData = fSheet.getDataRange().getValues();
+    const activeShiftId = PropertiesService.getScriptProperties().getProperty("activeShiftId") || "TURNO-LIBRE";
     const tz = Session.getScriptTimeZone();
     const fechaPago = Utilities.formatDate(new Date(), tz, "dd/MM/yyyy HH:mm:ss");
 
@@ -352,15 +369,8 @@ function doPost(e) {
       if (fData[i][0] == p.fiadoId) {
         fSheet.getRange(i + 1, 6).setValue("PAGADO");
         
-        // Opcional: Registrar cobro de deuda en el Historial de Ventas
-        const hSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL"]);
-        hSheet.appendRow([
-          "PAGOF-" + p.fiadoId,
-          fechaPago,
-          "[PAGO DEUDA] " + fData[i][2],
-          1,
-          fData[i][4]
-        ]);
+        const hSheet = getOrCreateSheet("Historial", ["ID VENTA", "FECHA", "PRODUCTO", "CANTIDAD", "SUBTOTAL", "ID TURNO"]);
+        hSheet.appendRow(["PAGOF-" + p.fiadoId, fechaPago, "[PAGO DEUDA] " + fData[i][2], 1, fData[i][4], activeShiftId]);
 
         logAudit("FIADO_PAGADO", "Deuda de '" + fData[i][2] + "' de $" + fData[i][4] + " fue COBRADA Y PAGADA.");
         return ContentService.createTextOutput("Fiado Pagado").setMimeType(ContentService.MimeType.TEXT);
